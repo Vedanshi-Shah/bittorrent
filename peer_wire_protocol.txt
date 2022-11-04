@@ -1,0 +1,39 @@
+Peer
+- bitfield => piece indices
+- state
+- peer ip and port
+- downloading : bool
+
+Client - needs a data structure for all pieces => array (contains index and blocks) <= initialised after tracker response
+- bitfield => initialized to zero => pieces with client * update after getting a piece
+- what pieces are missing? What pieces the current peer has? => Request for missing piece
+- writing to the file is piecewise
+
+Piece
+- index : int
+- blocks = []
+- buffer
+
+length = 2**14
+Block
+- offset
+- length
+
+Connect to every peer
+=> interested message
+=> Have/Bitfield: Update or add bitfield of the Peer
+=> Unchoke
+
+For single peer
+=> interested
+=> Bitfield
+=> Request for a random piece not with Client
+=> Would have divided each piece into blocks
+=> Check which block is not available (so should be something globally available with piece)
+=> Send a request message for that block (piece_index,block_offset,block_length)
+=> Get the data from that downloaded block (store where? Buffer as a dict with offsets?)
+=> Let's say block download happens sequentially, then you directly write to the piece buffer
+=> But now there are many peers acting asynchronously : are we going to discard the blocks that are received from other peers? Or do we need some conflict resolution here
+i.e. do we keep a global requested block array (ig no)
+=> get the block from the fastest peer - cancel all other requests? No but was end game
+

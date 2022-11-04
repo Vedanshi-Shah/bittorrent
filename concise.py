@@ -40,6 +40,11 @@ torrent_file_path = sys.argv[1]
 # Get the tracker URL
 torrent = bencodepy.decode_from_file(torrent_file_path)
 print(torrent[b'info'].keys())
+file_size = torrent[b'info'][b'length']
+piece_length = torrent[b'info'][b'piece length']
+num_pieces = torrent[b'info'][b'pieces']
+name = torrent[b'info'][b'name']
+print(file_size, piece_length, num_pieces, name)
 print(torrent.keys())
 tracker_url = torrent[b'announce']
 
@@ -86,279 +91,297 @@ params = {
 # print(uploaded, downloaded, left)
 
 # Get peers list from the tracker url
-"""
-    Tracker Response
+# """
+#     Tracker Response
 
-The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
+# The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
 
-    failure reason
-        If present, then no other keys may be present. The value is a human-readable error message as to why the request failed (string)
-    warning message
-        (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-    interval
-        Interval in seconds that the client should wait between sending regular requests to the tracker
-    min interval
-        (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
-    tracker id
-        A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
-    complete
-        number of peers with the entire file, i.e. seeders (integer)
-    incomplete
-        number of non-seeder peers, aka "leechers" (integer)
-    peers
-        (dictionary model) The value is a list of dictionaries, each with the following keys:
-        peer id: peer's self-selected ID, as described above for the tracker request (string)
-        ip: peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
-        port: peer's port number (integer)
-    peers
-        (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
-"""
+#     failure reason
+#         If present, then no other keys may be present. The value is a human-readable error message as to why the request failed (string)
+#     warning message
+#         (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+#     interval
+#         Interval in seconds that the client should wait between sending regular requests to the tracker
+#     min interval
+#         (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+#     tracker id
+#         A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+#     complete
+#         number of peers with the entire file, i.e. seeders (integer)
+#     incomplete
+#         number of non-seeder peers, aka "leechers" (integer)
+#     peers
+#         (dictionary model) The value is a list of dictionaries, each with the following keys:
+#         peer id: peer's self-selected ID, as described above for the tracker request (string)
+#         ip: peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
+#         port: peer's port number (integer)
+#     peers
+#         (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
+# """
 
-# Needed to decode port
-import socket
-# inet_ntoa: https://pythontic.com/modules/socket/inet_ntoa
-# Converts an IP address, which is in 32-bit packed format to the popular human readable dotted-quad string format
-from struct import unpack
+# # Needed to decode port
+# import socket
+# # inet_ntoa: https://pythontic.com/modules/socket/inet_ntoa
+# # Converts an IP address, which is in 32-bit packed format to the popular human readable dotted-quad string format
+# from struct import unpack
 
-def decode_port(port):
-    """
-        >: denotes big-endian
-        H: denotes unsigned short int
-    """
-    return unpack(">H", port)
+# def decode_port(port):
+#     """
+#         >: denotes big-endian
+#         H: denotes unsigned short int
+#     """
+#     return unpack(">H", port)
 
-def peers(response):
-    """
-        A list of tuples for each peer structured as (ip, port)
-    """
-    # The BitTorrent specification specifies two types of responses. One
-    # where the peers field is a list of dictionaries and one where all
-    # the peers are encoded in a single string
-    peers = response[b'peers']
-    if type(peers) == list:
-        # TODO Implement support for dictionary peer list
-        # logging.debug('Dictionary model peers are returned by tracker')
-        for peer in peers:
-            print(peer)
-        raise NotImplementedError()
-    else:
-        print('Binary model peers are returned by tracker')
+# def peers(response):
+#     """
+#         A list of tuples for each peer structured as (ip, port)
+#     """
+#     # The BitTorrent specification specifies two types of responses. One
+#     # where the peers field is a list of dictionaries and one where all
+#     # the peers are encoded in a single string
+#     peers = response[b'peers']
+#     if type(peers) == list:
+#         # TODO Implement support for dictionary peer list
+#         # logging.debug('Dictionary model peers are returned by tracker')
+#         peers_list = []
+#         for peer in peers:
+#             # print(peer[b'ip'])
+#             peers_list.append((peer[b'ip'].decode(), peer[b'port']))
+#         return peers_list
+#         # raise NotImplementedError()
+#     else:
+#         print('Binary model peers are returned by tracker')
 
-        # Split the string in pieces of length 6 bytes, where the first
-        # 4 characters is the IP the last 2 is the TCP port.
-        peers = [peers[i:i+6] for i in range(0, len(peers), 6)]
+#         # Split the string in pieces of length 6 bytes, where the first
+#         # 4 characters is the IP the last 2 is the TCP port.
+#         peers = [peers[i:i+6] for i in range(0, len(peers), 6)]
 
-        # Convert the encoded address to a list of tuples
-        return [(socket.inet_ntoa(p[:4]), decode_port(p[4:]))
-                for p in peers]
+#         # Convert the encoded address to a list of tuples
+#         return [(socket.inet_ntoa(p[:4]), decode_port(p[4:])[0])
+#                 for p in peers]
 
-print(tracker_url)
+# print(tracker_url)
 
-res = requests.get(tracker_url, params)
-print(f"Status code from tracker request: {res.status_code}")
-raw_res = bencodepy.decode(res.content)
-print("Raw content from tracker: ", raw_res)
-peers = peers(raw_res)
-print(f"Client IP: {peers[0]}")
-print(f"Client port: {peers[0][1][0]}")
-# print(req.status_code)
-# print(req.json)
+# res = requests.get(tracker_url, params)
+# print(f"Status code from tracker request: {res.status_code}")
+# raw_res = bencodepy.decode(res.content)
+# print("Raw content from tracker: ", raw_res)
+# peers = peers(raw_res)
+# print(f"Client IP: {peers[0][0]}")
+# print(f"Client port: {peers[0][1]}")
+# # print(req.status_code)
+# # print(req.json)
 
-# Using Peer Wire Protocol to exchange data
-"""
-    For efficiency, PWP uses a simple strategy called rarest first in which, given the current list of missing pieces, the client requests a rarest one first. This way, the availability of pieces are spread out. This strategy make it possible to reconstruct a file without the presence of any seeder
+# # Using Peer Wire Protocol to exchange data
+# """
+#     For efficiency, PWP uses a simple strategy called rarest first in which, given the current list of missing pieces, the client requests a rarest one first. This way, the availability of pieces are spread out. This strategy make it possible to reconstruct a file without the presence of any seeder
 
-    To solve the free rider problem, where a peer only downloads the pieces and rarely uploads any piece, PWP uses choke algorithms. A client gives pieces to good guys and "chokes" guys who haven't given the client much. However, to avoid peers choking each other to death, especially in the beginning, a client also randomly unchokes some (potentially) bad guy too. This is called optimistic unchoking
+#     To solve the free rider problem, where a peer only downloads the pieces and rarely uploads any piece, PWP uses choke algorithms. A client gives pieces to good guys and "chokes" guys who haven't given the client much. However, to avoid peers choking each other to death, especially in the beginning, a client also randomly unchokes some (potentially) bad guy too. This is called optimistic unchoking
 
-    It is recommended to set the default block size to be 16KB =  214 = 16384 bytes
+#     It is recommended to set the default block size to be 16KB =  214 = 16384 bytes
 
-    A client must maintain state information for each connection that it has with a remote peer:
-        choked
-            no requests will be answered until the client is unchoked. should not attempt to send requests for blocks, and it should consider all pending (unanswered) requests to be discarded
+#     A client must maintain state information for each connection that it has with a remote peer:
+#         choked
+#             no requests will be answered until the client is unchoked. should not attempt to send requests for blocks, and it should consider all pending (unanswered) requests to be discarded
         
-        interested
-            Whether or not the remote peer is interested in something this client has to offer. This is a notification that the remote peer will begin requesting blocks when the client unchokes them
+#         interested
+#             Whether or not the remote peer is interested in something this client has to offer. This is a notification that the remote peer will begin requesting blocks when the client unchokes them
 
-    But need am_choking, am_interested, peer_choking, peer_interested
-"""
+#     But need am_choking, am_interested, peer_choking, peer_interested
+# """
 
-"""
-    Message Flow
-    - initial 2-way handshake
-"""
+# """
+#     Message Flow
+#     - initial 2-way handshake
+# """
 
-"""
-    Handshake: The messages is always 68 bytes long (for this version of BitTorrent
-    protocol).
-    Message format:
-        <pstrlen><pstr><reserved><info_hash><peer_id>
-    In version 1.0 of the BitTorrent protocol:
-        pstrlen = 19
-        pstr = "BitTorrent protocol".
-    Thus length is:
-        49 + len(pstr) = 68 bytes long
-"""
-length = 49+19
+# """
+#     Handshake: The messages is always 68 bytes long (for this version of BitTorrent
+#     protocol).
+#     Message format:
+#         <pstrlen><pstr><reserved><info_hash><peer_id>
+#     In version 1.0 of the BitTorrent protocol:
+#         pstrlen = 19
+#         pstr = "BitTorrent protocol".
+#     Thus length is:
+#         49 + len(pstr) = 68 bytes long
+# """
+# length = 49+19
 
-IP = peers[0][0]
-port = peers[0][1][0]
+# IP = peers[0][0]
+# port = peers[0][1]
 
-handshake_flag = 0
+# handshake_flag = 0
 
-upload_speed = None
-download_speed = None
+# upload_speed = None
+# download_speed = None
 
-am_choking = 1
-am_interested = 0
-peer_choking = 1
-peer_interested = 0
+# am_choking = 1
+# am_interested = 0
+# peer_choking = 1
+# peer_interested = 0
 
-handshake_payload = struct.pack("!b", 19)
-handshake_payload += struct.pack("!19s", b"BitTorrent protocol")
-handshake_payload += struct.pack("!q", 0)
-handshake_payload += struct.pack("!20s", info_hash)
-handshake_payload += struct.pack("!20s", peer_id)
-print(f"Handshake payload", handshake_payload)
+# handshake_payload = struct.pack("!b", 19)
+# handshake_payload += struct.pack("!19s", b"BitTorrent protocol")
+# handshake_payload += struct.pack("!q", 0)
+# handshake_payload += struct.pack("!20s", info_hash)
+# handshake_payload += struct.pack("!20s", peer_id)
+# print(f"Handshake payload", handshake_payload)
 
-peer_sock = socket.socket(AF_INET, SOCK_STREAM)
-# Why a timeout of 10 seconds? Is this choke?
-peer_sock.settimeout(10)
-peer_sock.connect((IP, port))
-peer_sock.send(handshake_payload)
-peer_response = peer_sock.recv(1024)
-print("Peer response", peer_response)
-# Kishan effected an error if len(peer_response)<64
-# I think he meant 68
-print(f"Len of peer response: {len(peer_response)}")
-# From Kartik's repo
-def kartik_decode(res):
-    pstrlen, pstr, reserved, received_info_hash, peer_id = struct.unpack("!b19sq20s20s", peer_response)
-    print(pstrlen,pstr,reserved,received_info_hash, peer_id)
-    return received_info_hash
+# peer_sock = socket.socket(AF_INET, SOCK_STREAM)
+# # Why a timeout of 10 seconds? Is this choke?
+# peer_sock.settimeout(10)
+# peer_sock.connect((IP, port))
+# peer_sock.send(handshake_payload)
+# peer_response = peer_sock.recv(1024)
+# print("Peer response", peer_response)
+# # Kishan effected an error if len(peer_response)<64
+# # I think he meant 68
+# print(f"Len of peer response: {len(peer_response)}")
+# # From Kartik's repo
+# def kartik_decode(res):
+#     pstrlen, pstr, reserved, received_info_hash, peer_id = struct.unpack("!b19sq20s20s", res)
+#     print(pstrlen,pstr,reserved,received_info_hash, peer_id)
+#     return received_info_hash, peer_id
 
-received_info_hash = kartik_decode(peer_response)
-# Need to check the info hash from the peer
-if (info_hash==received_info_hash):
-    print("Handshake successful")
-# Need to check if the peer has a unique id
+# received_info_hash, peer_id_res = kartik_decode(peer_response)
+# # Need to check the info hash from the peer
+# if (info_hash==received_info_hash):
+#     print("Handshake successful")
+# # Need to check if the peer has a unique id
+# print(peer_id)
+# print(f"Peer ID: {peer_id_res}")
 
-class peer_wire_message():
+# class peer_wire_message():
     
-    # initalizes the attributes of peer wire message
-    def __init__(self, message_length, message_id, payload):
-        self.message_length = message_length
-        self.message_id     = message_id 
-        self.payload        = payload
+#     # initalizes the attributes of peer wire message
+#     def __init__(self, message_length, message_id, payload):
+#         self.message_length = message_length
+#         self.message_id     = message_id 
+#         self.payload        = payload
 
-    # returns raw bytes as peer message
-    def message(self):
-        message  = struct.pack("!I", self.message_length)
-        message += struct.pack("!B", self.message_id)
-        if self.payload != None:
-            message += self.payload
-        return message
+#     # returns raw bytes as peer message
+#     def message(self):
+#         message  = struct.pack("!I", self.message_length)
+#         message += struct.pack("!B", self.message_id)
+#         if self.payload != None:
+#             message += self.payload
+#         return message
 
-class choke(peer_wire_message):
-    def __init__(self):   
-        message_length = 1                              # 4 bytes message length
-        message_id     = 0                              # 1 byte message ID
-        payload        = None                           # no payload
-        super().__init__(message_length, message_id, payload)
+# class choke(peer_wire_message):
+#     def __init__(self):   
+#         message_length = 1                              # 4 bytes message length
+#         message_id     = 0                              # 1 byte message ID
+#         payload        = None                           # no payload
+#         super().__init__(message_length, message_id, payload)
 
-class unchoke(peer_wire_message):
-    def __init__(self):   
-        message_length = 1                              # 4 bytes message length
-        message_id     = 1                              # 1 byte message ID
-        payload        = None                           # no payload
-        super().__init__(message_length, message_id, payload)
+# class unchoke(peer_wire_message):
+#     def __init__(self):   
+#         message_length = 1                              # 4 bytes message length
+#         message_id     = 1                              # 1 byte message ID
+#         payload        = None                           # no payload
+#         super().__init__(message_length, message_id, payload)
 
-class interested(peer_wire_message):
-    def __init__(self):   
-        message_length = 1                              # 4 bytes message length
-        message_id     = 2                              # 1 byte message ID
-        payload        = None                           # no payload
-        super().__init__(message_length, message_id, payload)
+# class interested(peer_wire_message):
+#     def __init__(self):   
+#         message_length = 1                              # 4 bytes message length
+#         message_id     = 2                              # 1 byte message ID
+#         payload        = None                           # no payload
+#         super().__init__(message_length, message_id, payload)
 
 
-class uninterested(peer_wire_message):
-    def __init__(self):   
-        message_length = 1                              # 4 bytes message length
-        message_id     = 3                              # 1 byte message ID
-        payload        = None                           # no payload
-        super().__init__(message_length, message_id, payload)
+# class uninterested(peer_wire_message):
+#     def __init__(self):   
+#         message_length = 1                              # 4 bytes message length
+#         message_id     = 3                              # 1 byte message ID
+#         payload        = None                           # no payload
+#         super().__init__(message_length, message_id, payload)
 
-class have(peer_wire_message):
-    # initializes the message with given paylaod
-    def __init__(self, piece_index):   
-        message_length = 5                              # 4 bytes message length
-        message_id     = 4                              # 1 byte message ID
-        payload        = struct.pack("!I", piece_index) # 4 bytes payload
-        super.__init__(message_length, message_id, payload)
+# class have(peer_wire_message):
+#     # initializes the message with given paylaod
+#     def __init__(self, piece_index):   
+#         message_length = 5                              # 4 bytes message length
+#         message_id     = 4                              # 1 byte message ID
+#         payload        = struct.pack("!I", piece_index) # 4 bytes payload
+#         super.__init__(message_length, message_id, payload)
 
-class bitfield(peer_wire_message):
-    def __init__(self, piece_index):   
-        message_length = len(piece_index)+1
-        message_id     = 5
-        payload        = self.message(piece_index)
-        super.__init__(message_length, message_id, payload)
+# class bitfield(peer_wire_message):
+#     def __init__(self, piece_index):   
+#         message_length = len(piece_index)+1
+#         message_id     = 5
+#         payload        = self.message(piece_index)
+#         super.__init__(message_length, message_id, payload)
 
-    # Note that piece_index is the payload length of 4 bytes 
-    def message(self, piece_index):
-        self.message_id = 5
-        message  = struct.pack("!I", len(piece_index) + 1)
-        message += struct.pack("!B", self.message_id)
-        return message
+#     # Note that piece_index is the payload length of 4 bytes 
+#     def message(self, piece_index):
+#         self.message_id = 5
+#         message  = struct.pack("!I", len(piece_index) + 1)
+#         message += struct.pack("!B", self.message_id)
+#         return message
 
-class request(peer_wire_message):
-    def __init__(self, piece_index, block_offset, block_length):
-        message_length  = 13 
-        message_id      = 6
-        payload         = struct.pack("!I", piece_index)   
-        payload        += struct.pack("!I", block_offset) 
-        payload        += struct.pack("!I", block_length) 
-        super().__init__(message_length, message_id, payload)
+# class request(peer_wire_message):
+#     def __init__(self, piece_index, block_offset, block_length):
+#         message_length  = 13 
+#         message_id      = 6
+#         payload         = struct.pack("!I", piece_index)   
+#         payload        += struct.pack("!I", block_offset) 
+#         payload        += struct.pack("!I", block_length) 
+#         super().__init__(message_length, message_id, payload)
 
-def decode_message(peer_message):
-    offset = 0
-    message_length = struct.unpack_from("!I", peer_message)[0]
-    offset += 4
-    message_id = struct.unpack_from("!B", peer_message, offset)[0]
-    offset += 1
+# def decode_message(peer_message):
+#     offset = 0
+#     message_length = struct.unpack_from("!I", peer_message)[0]
+#     offset += 4
+#     message_id = struct.unpack_from("!B", peer_message, offset)[0]
+#     offset += 1
 
-    message_payload = peer_message[offset:]
-    print(message_length)
-    print(message_id)
-    if (message_id==4):
-        # Bitarray representation
-        print(bitstring.BitArray(message_payload).bin)
-    print(message_payload)
+#     message_payload = peer_message[offset:]
+#     print(message_length)
+#     print(message_id)
+#     if (message_id==4 or message_id==5):
+#         # Bitarray representation
+#         print(bitstring.BitArray(message_payload).bin)
+#     print(message_payload)
 
-# peer_message = peer_sock.recv(2**14)
-# print("Here")
+# # peer_message = peer_sock.recv(2**14)
+# # print("Here")
+# # decode_message(peer_message)
+
+# # Send an interested message
+# peer_sock.send(interested().message())
+
+# # After interested
+# print("After interested")
+# peer_message = peer_sock.recv(1024)
 # decode_message(peer_message)
 
-# Send an interested message
-peer_sock.send(interested().message())
+# # After unchoke
+# print("After unchoke")
+# peer_message = peer_sock.recv(1024)
+# decode_message(peer_message)
 
-# After interested
-peer_message = peer_sock.recv(1024)
-decode_message(peer_message)
+# # Go ahead only if unchoke
 
-# After unchoke
-peer_message = peer_sock.recv(1024)
-decode_message(peer_message)
 
-# Send request
-req_message = request(24,0,2**14).message()
-print(req_message)
-peer_sock.send(req_message)
+# # Send request
+# req_message = request(1,0,2**14).message()
+# print(req_message)
+# peer_sock.send(req_message)
 
-# time.sleep(5)
-peer_message = peer_sock.recv(2**14)
-print(peer_message)
-decode_message(peer_message)
+# # time.sleep(5)
+# # Piece message
+# peer_message = peer_sock.recv(2**14)
+# print(peer_message)
+# print(len(peer_message))
+# decode_message(peer_message)
 
-# Check for internet connection before trying to connect
-# requests.exceptions.ConnectionError
+# # Check for internet connection before trying to connect
+# # requests.exceptions.ConnectionError
 
-# Parser for torrent data
+# # Parser for torrent data
+
+# # Find out the number of blocks
+# # So, need piece length
+# # Piece length will be divided into blocks of length 2**14
+print(file_size%2**14)
+print(file_size//2**14)
