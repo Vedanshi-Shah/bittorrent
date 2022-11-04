@@ -12,7 +12,10 @@ import random
 
 torrent_file_path = sys.argv[1]
 torrent = bencodepy.decode_from_file(torrent_file_path)
-tracker_url = torrent[b'announce']
+if (b'announce' in torrent):
+    tracker_url = torrent[b'announce']
+else:
+    tracker_url = torrent[b'announce-list'][0]
 info = bencodepy.encode(torrent[b'info'])
 info_hash = sha1(info).digest()
 
@@ -152,6 +155,7 @@ def create_announce_payload(cid, action, transaction_id):
 
 announce_payload = create_announce_payload(cid, action, transaction_id)
 print(announce_payload)
+tracker_sock.sendto(announce_payload, (url, port))
 
 """
     Receive the packet.
@@ -161,7 +165,7 @@ print(announce_payload)
     Do not announce again until interval seconds have passed or an event has occurred.
 """
 
-raw_announce_data, conn = tracker_sock.recvfrom(2048)
+raw_announce_data, conn = tracker_sock.recvfrom(2**14)
 print(len(raw_announce_data))
 print(raw_announce_data)
 if (len(raw_announce_data)<20):
@@ -193,6 +197,7 @@ else:
         peers_list.append((peer_IP, peer_port))
         offset = offset + 6
 
+    print(interval, leechers, seeders)
     print("Done parsing announce data")
     print(peers_list)
 
