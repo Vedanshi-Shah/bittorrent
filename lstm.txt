@@ -1,0 +1,20 @@
+* Build LSTM/RNN from scratch
+- quite complicated functions used
+- there are something called gates
+
+* Text to Knowledge Graph conversion
+- can we go to to Image to Knowledge Graph conversion
+- a simple algorithm would be to extract nouns, verbs, adjectives and adverbs 
+
+https://github.com/martinetoering/KRR-course/blob/master/hw3/assignment.md
+https://arxiv.org/pdf/2007.04663v1.pdf
+https://arxiv.org/pdf/1406.6247.pdf
+https://www.kaggle.com/datasets/mathurinache/gpr1200-dataset
+https://www.kaggle.com/datasets/theaayushbajaj/cbir-dataset
+https://www.kaggle.com/c/landmark-recognition-2019
+https://www.kaggle.com/c/landmark-retrieval-2019
+https://github.com/matsui528/sis
+https://towardsdatascience.com/step-by-step-vgg16-implementation-in-keras-for-beginners-a833c686ae6c
+https://github.com/cvdfoundation/google-landmark
+https://arxiv.org/abs/1812.01584
+

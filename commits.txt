@@ -1,0 +1,215 @@
+commit cd1c181818839762870dd24bdc6e5c1210e2e28b (HEAD -> master, origin/master, origin/HEAD)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue May 11 11:51:25 2021 +0530
+
+    updated README
+
+commit c91d81874b12af7e91e61fc94c7452fa25749c34
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Nov 12 23:46:25 2020 +0530
+
+    added video of downloading
+
+commit e4af3409aec6b6d4284fb2a653c7f69389ee8ae8
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Nov 12 22:43:12 2020 +0530
+
+    FINAL CODE
+
+commit 2fa1ef7e1b7fe44216c5dfbb4f5c8f2d612e50df
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Nov 12 21:11:13 2020 +0530
+
+    code final test on seeding
+
+commit d2196175c60a53ec6ff00c49a77a0232969ceb30
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Nov 12 02:42:39 2020 +0530
+
+    code logging changed, only file logging for class othere than client
+
+commit 28cb8403a96ea339935ec2eeb567323751942180
+Author: kishan patel <kp768919@gmail.com>
+Date:   Wed Nov 11 20:57:54 2020 +0530
+
+    virtual enviornment added
+
+commit 624e1c3c3c958f5b007bf2f4f4a831cdb5cc92b5
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Nov 10 14:20:40 2020 +0530
+
+    updating README.md
+
+commit 80350ee9863e6fe9127539a7b6f08ade43a0ae2f
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Nov 10 04:17:41 2020 +0530
+
+    seeding test on AWS done
+
+commit 7672e313dfea16663e38e8a2034e20a889c19429
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Nov 10 02:09:40 2020 +0530
+
+    additional command line arguments added for client settings
+
+commit 7cd7280027ac9b6ebe10228b219e583001928a6c
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Nov 9 22:22:40 2020 +0530
+
+    logging made clearner for torrent and tracker class
+
+commit 15dedec7e0ce2d4d803b5f2eea32bfbde3014ecc
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Nov 9 04:42:52 2020 +0530
+
+    percentage of file downloaded, time remaining and download rate in swarm written
+
+commit a77b41611a1ce3f1f90aa9fb1b3e63943370eb49
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Nov 6 23:54:59 2020 +0530
+
+    tested downloading files on various torrents, top peer selection startergy implemented, percentage of file downloaded to be updated
+
+commit beb00914403f29bbbe62bf6a2a496906b1b1b41d
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Nov 6 19:07:14 2020 +0530
+
+    FSM for seeding tested works locally on machine, testing on foss server still left
+
+commit 8b00abe7bd4816b07f55151c41152da4025cef28
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Nov 6 02:50:27 2020 +0530
+
+    FSM tested with timeouts works for downloading, torrent statistics module written, uploading FSM written testing still pending
+
+commit 74998e1e3933112945a9cc10ba75cc988a9ab4f9
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Nov 5 04:04:16 2020 +0530
+
+    code refactored for swarm
+
+commit 3c3fc76adcc87035832ca80432ae15db725951c6
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Nov 3 21:22:04 2020 +0530
+
+    FSM written for downloading, torrent download works in multithreading, working on checking for timeouts in case of keep alive
+
+commit d6189bac1ef8465b2eecb948f7dc29bb3cafd05d
+Author: kishan patel <kp768919@gmail.com>
+Date:   Sat Oct 31 03:53:01 2020 +0530
+
+    code written for peice and peer selection startergy testing still left
+
+commit d9d0da747983f85d4e788890abbeae08b7126753
+Author: kishan patel <kp768919@gmail.com>
+Date:   Wed Oct 28 03:15:05 2020 +0530
+
+    started impelmeneting pieces selection stratergies
+
+commit 05fedd85355cc28046e4cfd296c4b656b1420584
+Author: kishan patel <kp768919@gmail.com>
+Date:   Wed Oct 28 00:13:14 2020 +0530
+
+    seeding testing done locally on laptop, however timeouts for seeding, multithreaded seeder and foss lab server test still remaining
+
+commit 8dd025c69ee9bf6068cfddef5126deb28a20ded8
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Oct 27 10:52:11 2020 +0530
+
+    testing of seeding handshake to be left
+
+commit 936523efbfc3caa3c39b65d95a34a7205b5cfb44
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Oct 27 03:51:09 2020 +0530
+
+    peer socket class created for leechers and seeders, currently able to recieved connection for seeding
+
+commit c4ab64f24eff6eec15e8d50b8b08cce31a41a00a
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Oct 26 05:06:02 2020 +0530
+
+    command line parser written, client code refactor and seeding functionaily code added but implementation still left
+
+commit 63f25a2036ebbbf6edd8d41a30f15951ae89cb65
+Author: kishan patel <kp768919@gmail.com>
+Date:   Sun Oct 25 23:45:10 2020 +0530
+
+    last piece download issue solved
+
+commit 2003d9a4b06bb2a8a7411fea5f94d364e0ac1a8e
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Oct 23 01:30:41 2020 +0530
+
+    multithreaded handshakes and init bitfield events, validation of piece done, torrent reader updated for multifile
+
+commit c19f7f53302360bedfb01fcb814cc85cb029aa6d
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Oct 22 11:33:54 2020 +0530
+
+    piece downloaded is written in file, validation of piece pending, multithreading for events started
+
+commit ed68e9963488f3c9510798abbab2eb78698f49ce
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Oct 19 19:39:27 2020 +0530
+
+    full piece being downloaded by function, shared file handler written yet to be tested
+
+commit 669c82aaa8983c0b1b6845fc06ea7545b0d1c52f
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Oct 19 04:25:51 2020 +0530
+
+    logger object for each class instance, logging execution events, message decoder and handler written
+
+commit 90c814bbfa73c348b58c05b5650439502942c48d
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Oct 16 15:41:42 2020 +0530
+
+    piece being downloaded, succesfully created torrent logging class
+
+commit 6901de72d6861ab858426f96a5fbd0b0ad0eb978
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Oct 15 21:33:17 2020 +0530
+
+    code cleaned removed bugs, handshake happening able to recieve bitfields
+
+commit 3542c0f8d3265375d80d69c2d850232ec939d098
+Author: kishan patel <kp768919@gmail.com>
+Date:   Wed Oct 14 01:54:46 2020 +0530
+
+    peer wire messaging class created, sending and recieving messages successfully
+
+commit e3f3bbc0168397ead0ffe32a64a89ed392be0446
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Oct 12 02:18:55 2020 +0530
+
+    peer handshaking done, recieving the handshake response
+
+commit f0d94573d27be0f864061cad87b61c63ebc40acc (commit5)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Fri Oct 9 03:17:45 2020 +0530
+
+    UDP tracker request and response working
+
+commit bc24fe3652fae306e983a2051936865590f9a589 (commit4)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Mon Oct 5 03:44:59 2020 +0530
+
+    peer IP address and peer port recieved from HTTP tracker
+
+commit f44b0901552fa7bf8c1638174149379d25fdfd2d (commit3)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Sun Oct 4 03:00:43 2020 +0530
+
+    added tracker and torrent class
+
+commit b4ccb3e76202267895acf35ab4182569b0319736 (commit2)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Tue Sep 29 00:08:07 2020 +0530
+
+    added torrent file metadata extractor
+
+commit 2e493ccd3a7d6cd3c2cdaa8414c8f049739d41c8 (commit1)
+Author: kishan patel <kp768919@gmail.com>
+Date:   Thu Sep 3 00:10:41 2020 +0530
+
+    initial commit

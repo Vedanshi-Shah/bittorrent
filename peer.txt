@@ -1,0 +1,53 @@
+- Each peer is connected to multiple peers at the same time, and thus downloading or uploading to multiple peers at the same time
+- There is a .torrent file that regulates how many pieces there is for a given file(s),
+- how the data integrity of these pieces can be confirmed by clients
+- A tracker is a central server keeping track of available peers for a given torrent
+
+Messages
+========
+- Handshake message (peer_id,info_hash)
+ = check for info_hash else close
+- BitField (seeding)
+(length of BitField?)
+
+Client started in state choked and not interested
+= not allowed to request pieces from the remote peer
+
+Client Handshake - client requesting
+Peer Handshake - send info_hash and compare
+(may close the connect
+Peer sends BitField
+Client Send interested
+Peer Send unchoke
+
+Requesting Piece
+----------------
+Send Request for given piece
+- receive Piece message, raw data
+
+- Client will only ever have one outstanding Request per piece
+- only one per connection but multiple Requests wrt all peers
+
+Send a Cancel message to stop downloading
+
+Other Messages
+--------------
+Have
+- at any point, a have message
+- message payload is the piece index
+- updates the information on which pieces the peer has
+
+KeepAlive
+- no payload
+
+Implementation
+--------------
+- PeerConnection open TCP conn to remote peer using open_connection
+- returns StreamReader and StreamWriter
+- use asynchronous iterator to read stream
+
+BitTorrent message format
+-------------------------
+<length><id><payload>
+- Note that all messages uses Big-Endian in BitTorrent
+
