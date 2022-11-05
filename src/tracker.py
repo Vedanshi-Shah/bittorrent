@@ -5,8 +5,12 @@ import requests
 import struct
 from socket import *
 from peer import Peer
+from prettify import generate_heading
 import sys
 import math
+
+BLOCK_LENGTH = 2**14
+
 class Tracker:
     def __init__(self,filename):
         self.filename='../torrent_files/'+filename
@@ -21,21 +25,45 @@ class Tracker:
             self.file_length=self.raw_data['info'.encode()]['length'.encode()]
             self.piece_length=self.raw_data['info'.encode()]['piece length'.encode()]
             self.file_name=self.raw_data['info'.encode()]['name'.encode()].decode()
-            self.pieces=self.raw_data['info'.encode()]['pieces'.encode()]
+            self.pieces_info=self.raw_data['info'.encode()]['pieces'.encode()]
             info_bencoded=bencodepy.encode(self.raw_data['info'.encode()])
             self.info_hash=hashlib.sha1(info_bencoded).digest()
             self.peer_id=''
             self.port=6885
             self.uploaded=0
             self.downloaded=0
-            self.left=self.file_length 
+            self.left=self.file_length
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
+            self.pieces = {}
+            rem = [1 if self.piece_length%BLOCK_LENGTH==0 else 0][0]
+            print(rem)
+            self.num_blocks = self.piece_length//BLOCK_LENGTH+rem
+            self.create_piece_dict()
+    
+    def create_piece_dict(self):
+        blocks = {}
+        for j in range(self.num_blocks):
+            blocks[j] = False
+        for i in range(self.no_pieces):
+            self.pieces[i] = blocks
+    
+    def find_next_block(self, piece_index):
+        # print("Here")
+        # print(self.pieces, piece_index)
+        for i in range(self.num_blocks):
+            if (self.pieces[piece_index][i]==0 and i!=self.num_blocks-1):
+                return (i,2**14,False)
+            elif (self.pieces[piece_index][i]==0 and i==self.num_blocks-1):
+                return (i,self.piece_length%BLOCK_LENGTH,False)
+            else:
+                return (i,0,True)
+
     def message_peers(self):
         i=0
         while True:
             try:
                 client=socket(AF_INET,SOCK_STREAM)
-                client.settimeout(10)
+                client.settimeout(15)
                 client.connect((self.peers[i].ip, self.peers[i].port))
                 break
             except (Exception,) as e:
@@ -44,9 +72,11 @@ class Tracker:
                 if i == len(self.peers):
                     print("No peers connecting")
                     return
+        generate_heading(f"Handshaking with ({self.peers[i].ip}, {self.peers[i].port})...")
         a=self.peers[i].send_handshake(client)
         if(a["status"]==0):
             sys.exit(0)
+        generate_heading(f"Sending interested to ({self.peers[i].ip}, {self.peers[i].port})...")
         b=self.peers[i].send_interested(client)
         if(b["status"]==0):
             print("ergrg")
@@ -85,7 +115,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port']))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.find_next_block))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:
@@ -98,6 +128,6 @@ class Tracker:
                     port = struct.unpack_from("!H", p, offset)[0]
                     offset += 2
                     if((ip,port) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block))
                         piport.append((ip,port))
         print(len(self.peers))
