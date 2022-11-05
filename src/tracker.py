@@ -45,8 +45,10 @@ class Tracker:
         for i in range(self.no_pieces):
             self.pieces[i] = blocks
     
-    def write_block(self,piece_index,block_offset,block_length):
-        print()
+    def write_block(self,piece_index,block_offset,block_data,ip,port):
+        generate_heading(f"Received from {ip}, {port}")
+        generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
+        self.pieces[piece_index][block_offset] = block_data.decode()
     
     def find_next_block(self, piece_index):
         # print("Here")
@@ -76,7 +78,7 @@ class Tracker:
         while True and i<len(self.peers):
             try:
                 client=socket(AF_INET,SOCK_STREAM)
-                client.settimeout(15)
+                client.settimeout(10)
                 client.connect((self.peers[i].ip, self.peers[i].port))
                 status = self.try_handshake(client, i)
                 if status:
@@ -125,7 +127,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:
@@ -138,6 +140,6 @@ class Tracker:
                     port = struct.unpack_from("!H", p, offset)[0]
                     offset += 2
                     if((ip,port) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block))
                         piport.append((ip,port))
         print(len(self.peers))

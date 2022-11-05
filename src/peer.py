@@ -5,7 +5,7 @@ import sys
 import random
 from prettify import generate_heading, keys_values
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -19,6 +19,7 @@ class Peer:
         self.present_bits=[0]*no_pieces
         self.no_pieces = no_pieces
         self.find_next_block = find_next_block
+        self.write_block = write_block
 
     def send_handshake(self,client):
         handshake_msg=struct.pack("!b19sq20s20s",19,"BitTorrent protocol".encode(),0,self.info_hash,self.id.encode())
@@ -80,18 +81,21 @@ class Peer:
                 self.present_bits[i] = 0
 
     def read_and_write_messages(self,client):
+        client.settimeout(None)
         while True:
             # try:
                 recv_data=client.recv(65535)
                 if len(recv_data)>4:
                     offset = 0
                     msg_len=struct.unpack_from("!I",recv_data)[0]
+                    generate_heading(f"Message Length: {msg_len}")
                     offset += 4
                     msg_id=struct.unpack_from("!B",recv_data, offset)[0]
                     offset+=1
 
                     if msg_id==0:
                         generate_heading("Choke")
+                        self.peer_choking = 1
                     elif msg_id==1:
                         generate_heading(f"Unchoke by ({self.ip, self.port, self.id})")
                         self.peer_choking = 0
@@ -113,15 +117,19 @@ class Peer:
                         generate_heading("Request")
                     elif msg_id==7:
                         generate_heading("Piece")
-                        piece = recv_data[offset:]
                         piece_index = struct.unpack_from("!i",recv_data,offset)[0]
                         offset+=4
                         block_offset = struct.unpack_from("!i",recv_data,offset)[0]
                         offset+=4
-                        block_length = int(struct.unpack_from("!i",recv_data,offset)[0])
-                        print(f"Received block: (piece_index = f{piece_index}, block_offset = {block_offset}, block_length={block_length}")
+                        block = recv_data[offset:]
+                        # print(type(block))
+                        # print(offset)
+                        # print(block)
+                        # print(len(block.decode()))
+                        print(f"Received block: (piece_index = {piece_index}, block_offset = {block_offset}, block_length={len(block)}")
                         print()
-                        print(piece[offset:])
+                        self.write_block(piece_index,block_offset,block,self.ip,self.port)
+                        self.downloading = 0
                         client.close()
                         break
                     elif msg_id==8:
