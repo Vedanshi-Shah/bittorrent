@@ -119,7 +119,7 @@ class Peer:
                         block_offset = struct.unpack_from("!i",recv_data,offset)[0]
                         offset+=4
                         block_length = int(struct.unpack_from("!i",recv_data,offset)[0])
-                        print(piece_index,block_offset,block_length)
+                        print(f"Received block: (piece_index = f{piece_index}, block_offset = {block_offset}, block_length={block_length}")
                         print()
                         print(piece[offset:])
                         client.close()
