@@ -36,30 +36,31 @@ class Tracker:
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
             self.pieces = {}
             self.num_blocks = math.ceil(self.piece_length/BLOCK_LENGTH)
+            generate_heading(f"Num blocks: {self.num_blocks}")
             self.create_piece_dict()
     
     def create_piece_dict(self):
         blocks = {}
         for j in range(self.num_blocks):
-            blocks[j] = ""
+            blocks[j] = b""
         for i in range(self.no_pieces):
             self.pieces[i] = blocks
     
     def write_block(self,piece_index,block_offset,block_data,ip,port):
         generate_heading(f"Received from {ip}, {port}")
         generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
-        self.pieces[piece_index][block_offset] = block_data.decode()
-    
+        self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
+
     def find_next_block(self, piece_index):
         # print("Here")
         # print(self.pieces, piece_index)
+        flag = False
         for i in range(self.num_blocks):
-            if (self.pieces[piece_index][i]=="" and i!=self.num_blocks-1):
+            if (self.pieces[piece_index][i]==b""):
+                flag = True
                 return (2**14*i,2**14,False)
-            elif (self.pieces[piece_index][i]=="" and i==self.num_blocks-1):
-                return (2**14*i,self.piece_length%BLOCK_LENGTH,False)
-            else:
-                return (i,0,True)
+        if (not(flag)):
+            return (0,0,True)
     
     def try_handshake(self,client,peer_index):
         generate_heading(f"Handshaking with ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
@@ -78,7 +79,7 @@ class Tracker:
         while True and i<len(self.peers):
             try:
                 client=socket(AF_INET,SOCK_STREAM)
-                client.settimeout(10)
+                client.settimeout(5)
                 client.connect((self.peers[i].ip, self.peers[i].port))
                 status = self.try_handshake(client, i)
                 if status:
@@ -112,7 +113,6 @@ class Tracker:
         while i<len(self.tracker_urls):
             url=self.tracker_urls[i]
             try:
-                print(url)
                 announce_response=requests.get(url,params).content
                 response_dict=bencodepy.decode(announce_response)
                 responses.append(response_dict)
@@ -142,4 +142,4 @@ class Tracker:
                     if((ip,port) not in piport):
                         self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block))
                         piport.append((ip,port))
-        print(len(self.peers))
+        # print(len(self.peers))

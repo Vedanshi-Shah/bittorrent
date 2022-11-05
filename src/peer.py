@@ -87,8 +87,7 @@ class Peer:
                 recv_data=client.recv(65535)
                 if len(recv_data)>4:
                     offset = 0
-                    msg_len=struct.unpack_from("!I",recv_data)[0]
-                    generate_heading(f"Message Length: {msg_len}")
+                    msg_len=struct.unpack_from("!i",recv_data)[0]
                     offset += 4
                     msg_id=struct.unpack_from("!B",recv_data, offset)[0]
                     offset+=1
@@ -122,38 +121,24 @@ class Peer:
                         block_offset = struct.unpack_from("!i",recv_data,offset)[0]
                         offset+=4
                         block = recv_data[offset:]
-                        # print(type(block))
-                        # print(offset)
                         # print(block)
-                        # print(len(block.decode()))
-                        print(f"Received block: (piece_index = {piece_index}, block_offset = {block_offset}, block_length={len(block)}")
-                        print()
+                        # print(f"Received block: (piece_index = {piece_index}, block_offset = {block_offset}, block_length={len(block)}")
+                        # print()
                         self.write_block(piece_index,block_offset,block,self.ip,self.port)
                         self.downloading = 0
-                        client.close()
-                        break
                     elif msg_id==8:
                         generate_heading("Cancel")
                     
-                    keys_values({"interested": self.am_interested, "choking": self.peer_choking})
                     if (self.am_interested and self.peer_choking==0 and self.downloading==0):
-                        # Can send the request
-                        # So, for this, pick out a random piece
-                        # Request for that piece only if it is with this peer
-                        # piece_index = random.randint(0, self.no_pieces)
-                        print("Here")
-                        # piece_index = random.randint(0, self.no_pieces-1)
                         piece_index = 0
-                        # Is this piece with the peer?
                         if self.present_bits[piece_index]==1:
-                            # Send the request
                             self.downloading = 1
-                            print(f"Trying to request piece {piece_index} from ({self.ip, self.port, self.id})")
                             block_offset,block_length,status = self.find_next_block(piece_index)
-                            print(f"Need to request for {block_offset} | {block_length}, {status}")
+                            if (status==True):
+                                generate_heading("Done")
+                                break
                             self.send_request_message(client,piece_index,block_offset,block_length)
                         else:
-                            # Send keep alive
                             self.send_keep_alive(client)
                             print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
 
