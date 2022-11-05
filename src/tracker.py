@@ -36,7 +36,6 @@ class Tracker:
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
             self.pieces = {}
             rem = [1 if self.piece_length%BLOCK_LENGTH==0 else 0][0]
-            print(rem)
             self.num_blocks = self.piece_length//BLOCK_LENGTH+rem
             self.create_piece_dict()
     
@@ -52,9 +51,9 @@ class Tracker:
         # print(self.pieces, piece_index)
         for i in range(self.num_blocks):
             if (self.pieces[piece_index][i]==0 and i!=self.num_blocks-1):
-                return (i,2**14,False)
+                return (2**14*i,2**14,False)
             elif (self.pieces[piece_index][i]==0 and i==self.num_blocks-1):
-                return (i,self.piece_length%BLOCK_LENGTH,False)
+                return (2**14*i,self.piece_length%BLOCK_LENGTH,False)
             else:
                 return (i,0,True)
 
@@ -115,7 +114,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.find_next_block))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:

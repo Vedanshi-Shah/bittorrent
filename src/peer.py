@@ -122,6 +122,7 @@ class Peer:
                         # Can send the request
                         # So, for this, pick out a random piece
                         # Request for that piece only if it is with this peer
+                        # piece_index = random.randint(0, self.no_pieces)
                         piece_index = random.randint(0, self.no_pieces)
                         # Is this piece with the peer?
                         if self.present_bits[piece_index]==1:
