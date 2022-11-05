@@ -3,7 +3,7 @@ import struct
 import bitstring
 import sys
 import random
-from prettify import generate_heading
+from prettify import generate_heading, keys_values
 class Peer:
     def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block):
         self.ip=ip
@@ -56,12 +56,11 @@ class Peer:
         req_message=struct.pack("!IB",13,6)
         # Index, Block Offset, Block length
         print(piece_index, block_offset, block_length)
-        payload = struct.pack("!I", piece_index)
-        payload += struct.pack("!I", block_offset)
-        payload += struct.pack("!I", block_length)
+        payload = struct.pack("!i", piece_index)
+        payload += struct.pack("!i", block_offset)
+        payload += struct.pack("!i", block_length)
         req_message += payload
-        print("Sending request...")
-        print(req_message)
+        print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
         client.send(req_message)
     
     def send_keep_alive(self, client):
@@ -69,7 +68,8 @@ class Peer:
         client.send(keep_alive_message)
     
     def update_bitfield(self, piece_index):
-        self.present_bits[piece_index] = 1
+        if (piece_index<self.no_pieces):
+            self.present_bits[piece_index] = 1
     
     def set_bitfield(self, bitstring):
         print(bitstring)
@@ -81,7 +81,7 @@ class Peer:
 
     def read_and_write_messages(self,client):
         while True:
-            try:
+            # try:
                 recv_data=client.recv(65535)
                 if len(recv_data)>4:
                     offset = 0
@@ -114,16 +114,28 @@ class Peer:
                     elif msg_id==7:
                         generate_heading("Piece")
                         piece = recv_data[offset:]
-                        print(piece)
+                        piece_index = struct.unpack_from("!i",recv_data,offset)[0]
+                        offset+=4
+                        block_offset = struct.unpack_from("!i",recv_data,offset)[0]
+                        offset+=4
+                        block_length = int(struct.unpack_from("!i",recv_data,offset)[0])
+                        print(piece_index,block_offset,block_length)
+                        print()
+                        print(piece[offset:])
+                        client.close()
+                        break
                     elif msg_id==8:
                         generate_heading("Cancel")
                     
+                    keys_values({"interested": self.am_interested, "choking": self.peer_choking})
                     if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                         # Can send the request
                         # So, for this, pick out a random piece
                         # Request for that piece only if it is with this peer
                         # piece_index = random.randint(0, self.no_pieces)
-                        piece_index = random.randint(0, self.no_pieces)
+                        print("Here")
+                        # piece_index = random.randint(0, self.no_pieces-1)
+                        piece_index = 0
                         # Is this piece with the peer?
                         if self.present_bits[piece_index]==1:
                             # Send the request
@@ -135,9 +147,9 @@ class Peer:
                         else:
                             # Send keep alive
                             self.send_keep_alive(client)
-                            print(f"Piece with index ({piece_index}) was not found with the peer ({self.ip, self.port, self.id})")
+                            print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
 
-            except Exception as e:
-                print(e)
-                client.settimeout(2)
-                # sys.exit(0)
+            # except Exception as e:
+            #     print(e)
+            #     client.settimeout(2)
+            #     # sys.exit(0)

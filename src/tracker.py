@@ -35,58 +35,62 @@ class Tracker:
             self.left=self.file_length-self.downloaded
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
             self.pieces = {}
-            rem = [1 if self.piece_length%BLOCK_LENGTH==0 else 0][0]
-            self.num_blocks = self.piece_length//BLOCK_LENGTH+rem
+            self.num_blocks = math.ceil(self.piece_length/BLOCK_LENGTH)
             self.create_piece_dict()
     
     def create_piece_dict(self):
         blocks = {}
         for j in range(self.num_blocks):
-            blocks[j] = False
+            blocks[j] = ""
         for i in range(self.no_pieces):
             self.pieces[i] = blocks
+    
+    def write_block(self,piece_index,block_offset,block_length):
+        print()
     
     def find_next_block(self, piece_index):
         # print("Here")
         # print(self.pieces, piece_index)
         for i in range(self.num_blocks):
-            if (self.pieces[piece_index][i]==0 and i!=self.num_blocks-1):
+            if (self.pieces[piece_index][i]=="" and i!=self.num_blocks-1):
                 return (2**14*i,2**14,False)
-            elif (self.pieces[piece_index][i]==0 and i==self.num_blocks-1):
+            elif (self.pieces[piece_index][i]=="" and i==self.num_blocks-1):
                 return (2**14*i,self.piece_length%BLOCK_LENGTH,False)
             else:
                 return (i,0,True)
     
-    def try_handshake(self,client,peer):
-        generate_heading(f"Handshaking with ({peer.ip}, {peer.port})...")
-        a=peer.send_handshake(client)
+    def try_handshake(self,client,peer_index):
+        generate_heading(f"Handshaking with ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
+        a=self.peers[peer_index].send_handshake(client)
         if(a["status"]==0):
             return 0
-        generate_heading(f"Sending interested to ({peer.ip}, {peer.port})...")
-        b=peer.send_interested(client)
+        generate_heading(f"Sending interested to ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
+        b=self.peers[peer_index].send_interested(client)
         if(b["status"]==0):
             print("ergrg")
             return 0
-        peer.read_and_write_messages(client)
         return 1
 
     def message_peers(self):
         i=0
-        while True:
+        while True and i<len(self.peers):
             try:
                 client=socket(AF_INET,SOCK_STREAM)
                 client.settimeout(15)
                 client.connect((self.peers[i].ip, self.peers[i].port))
-                status = self.try_handshake(client, self.peers[i])
-                i+=1
+                status = self.try_handshake(client, i)
                 if status:
                     break
-            except (Exception,) as e:
+                i+=1
+            except (OSError,) as e:
                 print(e)
                 i += 1
-                if i == len(self.peers):
-                    print("No peers connecting")
-                    return
+                # if i == len(self.peers):
+                #     print("No peers connecting")
+                #     return
+        print(self.no_pieces)
+        self.peers[i].read_and_write_messages(client)
+
     def get_peers(self):
         if(self.peer_id==''):
             self.peer_id='VS2083'+str(random.randint(10000000000000, 99999999999999))
