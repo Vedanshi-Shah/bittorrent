@@ -29,10 +29,10 @@ class Tracker:
             info_bencoded=bencodepy.encode(self.raw_data['info'.encode()])
             self.info_hash=hashlib.sha1(info_bencoded).digest()
             self.peer_id=''
-            self.port=6885
+            self.port=6884
             self.uploaded=0
             self.downloaded=0
-            self.left=self.file_length
+            self.left=self.file_length-self.downloaded
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
             self.pieces = {}
             rem = [1 if self.piece_length%BLOCK_LENGTH==0 else 0][0]
@@ -56,6 +56,19 @@ class Tracker:
                 return (2**14*i,self.piece_length%BLOCK_LENGTH,False)
             else:
                 return (i,0,True)
+    
+    def try_handshake(self,client,peer):
+        generate_heading(f"Handshaking with ({peer.ip}, {peer.port})...")
+        a=peer.send_handshake(client)
+        if(a["status"]==0):
+            return 0
+        generate_heading(f"Sending interested to ({peer.ip}, {peer.port})...")
+        b=peer.send_interested(client)
+        if(b["status"]==0):
+            print("ergrg")
+            return 0
+        peer.read_and_write_messages(client)
+        return 1
 
     def message_peers(self):
         i=0
@@ -64,23 +77,16 @@ class Tracker:
                 client=socket(AF_INET,SOCK_STREAM)
                 client.settimeout(15)
                 client.connect((self.peers[i].ip, self.peers[i].port))
-                break
+                status = self.try_handshake(client, self.peers[i])
+                i+=1
+                if status:
+                    break
             except (Exception,) as e:
                 print(e)
                 i += 1
                 if i == len(self.peers):
                     print("No peers connecting")
                     return
-        generate_heading(f"Handshaking with ({self.peers[i].ip}, {self.peers[i].port})...")
-        a=self.peers[i].send_handshake(client)
-        if(a["status"]==0):
-            sys.exit(0)
-        generate_heading(f"Sending interested to ({self.peers[i].ip}, {self.peers[i].port})...")
-        b=self.peers[i].send_interested(client)
-        if(b["status"]==0):
-            print("ergrg")
-            sys.exit(0)
-        self.peers[i].read_and_write_messages(client)
     def get_peers(self):
         if(self.peer_id==''):
             self.peer_id='VS2083'+str(random.randint(10000000000000, 99999999999999))
@@ -92,7 +98,8 @@ class Tracker:
             "uploaded":self.uploaded,
             "downloaded":self.downloaded,
             "left":self.left,
-            "compact":1
+            "compact":1,
+            'event': 'started',
         }
         self.tracker_urls=list(set(self.tracker_urls))
         responses=[]

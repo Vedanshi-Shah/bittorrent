@@ -36,8 +36,9 @@ class Peer:
                     return {"status":0}
                 break
             except (Exception,):
-                print("Here")
-                client.settimeout(2)
+                # print("Here")
+                # client.settimeout(2)
+                return {"status": 0}
         return {"status":1}
     
     def send_interested(self,client):
@@ -51,9 +52,10 @@ class Peer:
         self.am_interested=1
         return {"status":1}
     
-    def send_request_message(self,client,piece_index, block_length,block_offset):
+    def send_request_message(self,client,piece_index,block_offset,block_length):
         req_message=struct.pack("!IB",13,6)
         # Index, Block Offset, Block length
+        print(piece_index, block_offset, block_length)
         payload = struct.pack("!I", piece_index)
         payload += struct.pack("!I", block_offset)
         payload += struct.pack("!I", block_length)
@@ -67,7 +69,6 @@ class Peer:
         client.send(keep_alive_message)
     
     def update_bitfield(self, piece_index):
-        print(piece_index)
         self.present_bits[piece_index] = 1
     
     def set_bitfield(self, bitstring):
@@ -107,7 +108,6 @@ class Peer:
                         generate_heading("BitField")
                         bitfield = recv_data[offset:]
                         bitfield = bitstring.BitArray(bitfield).bin
-                        print(bitfield)
                         self.set_bitfield(bitfield)
                     elif msg_id==6:
                         generate_heading("Request")
