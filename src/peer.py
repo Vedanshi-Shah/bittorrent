@@ -6,7 +6,7 @@ import random
 from prettify import generate_heading, keys_values
 import asyncio
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -21,10 +21,13 @@ class Peer:
         self.no_pieces = no_pieces
         self.find_next_block = find_next_block
         self.write_block = write_block
-    def send_interested(self,writer):
+        self.get_piece_index = get_piece_index
+
+    async def send_interested(self,writer):
         # try:
         interested_msg=struct.pack("!Ib",1,2)
         writer.write(interested_msg)
+        await writer.drain()
         # except Exception as e:
         #     print("Here")
         #     print(e)
@@ -55,11 +58,12 @@ class Peer:
                 self.update_bitfield(i)
             else:
                 self.present_bits[i] = 0
-    async def begin(self,piece_no):
+    async def begin(self):
         try:
+            generate_heading(f"{self.ip} | {self.port} was called")
             reader,writer=await asyncio.open_connection(self.ip,self.port)
             await self.send_handshake(reader,writer)
-            self.send_interested(writer)
+            await self.send_interested(writer)
             self.am_interested=1
             while True:
                 try:
@@ -98,11 +102,13 @@ class Peer:
                             block_offset=struct.unpack_from("!i",recv_data,offset)[0]
                             offset+=4
                             block=recv_data[offset:]
-                            self.write_block(piece_no,block_offset,block,self.ip,self.port)
+                            self.write_block(piece_index,block_offset,block,self.ip,self.port)
                             self.downloading=0
                         elif msg_id==8:
                             generate_heading("Cancel")
+                        generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
+                            piece_no = self.get_piece_index()
                             if self.present_bits[piece_no]==1:
                                 self.downloading=1
                                 block_offset,block_length,status = self.find_next_block(piece_no)
@@ -130,6 +136,7 @@ class Peer:
         decoded_recv_data = struct.unpack("!b19sq20s20s", s)
         if decoded_recv_data[3] != self.info_hash:
             raise Exception("Invalid Peer Connection")
+
     def read_and_write_messages(self,client):
         client.settimeout(None)
         while True:
