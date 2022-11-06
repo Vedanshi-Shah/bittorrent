@@ -8,7 +8,7 @@ from peer import Peer
 from prettify import generate_heading
 import sys
 import math
-
+import asyncio
 BLOCK_LENGTH = 2**14
 
 class Tracker:
@@ -34,6 +34,7 @@ class Tracker:
             self.downloaded=0
             self.left=self.file_length-self.downloaded
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
+            self.piece_status=[0]*self.no_pieces
             self.pieces = {}
             self.num_blocks = math.ceil(self.piece_length/BLOCK_LENGTH)
             generate_heading(f"Num blocks: {self.num_blocks}")
@@ -47,6 +48,9 @@ class Tracker:
             self.pieces[i] = blocks
     
     def write_block(self,piece_index,block_offset,block_data,ip,port):
+        if(block_offset==self.num_blocks):
+            self.piece_status[piece_index]=1
+            self.k+=1
         generate_heading(f"Received from {ip}, {port}")
         generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
@@ -73,7 +77,16 @@ class Tracker:
             print("ergrg")
             return 0
         return 1
-
+    async def start_messaging(self):
+        self.create_piece_dict()
+        #fill 4 pieces at random first
+        generate_heading(f"No. of Peers: {len(self.peers)}")
+        random_pieces=random.choices(range(0,self.no_pieces),k=4)
+        self.k=0
+        while(sum(self.piece_status)<4):
+            generate_heading(f"Piece Number: {random_pieces[self.k]}")
+            await asyncio.gather(*([peer.begin(random_pieces[self.k]) for peer in self.peers]))
+        print(self.pieces)
     def message_peers(self):
         i=0
         while True and i<len(self.peers):
