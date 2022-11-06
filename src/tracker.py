@@ -47,14 +47,15 @@ class Tracker:
             self.pieces[i] = {}
     
     def write_block(self,piece_index,block_offset,block_data,ip,port):
-        if(block_offset==self.num_blocks):
+        if(math.ceil(block_offset/2**14)==self.num_blocks-1):
             self.piece_status[piece_index]=1
+            self.downloading_piece=None
         generate_heading(f"Received from {ip}, {port}")
         generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
-        if (len(self.pieces[piece_index])==self.no_pieces):
-            self.piece_status[piece_index] = 1
-            self.downloading_piece = None
+        # if (len(self.pieces[piece_index])==self.no_pieces):
+        #     self.piece_status[piece_index] = 1
+        #     self.downloading_piece = None
 
     def find_next_block(self, piece_index):
         # print("Here")
@@ -65,6 +66,7 @@ class Tracker:
                 flag = True
                 return (2**14*i,2**14,False)
         if (not(flag)):
+            print("don't be here, fool!!!!!!!!!")
             return (0,0,True)
     
     def try_handshake(self,client,peer_index):
@@ -95,7 +97,7 @@ class Tracker:
                     generate_heading(f"Piece index: {piece_index}")
                     self.downloading_piece = piece_index
                     break
-            return piece_index
+            return self.downloading_piece
         else:
             return self.downloading_piece
         # random_pieces=random.choices(range(0,self.no_pieces),k=4)

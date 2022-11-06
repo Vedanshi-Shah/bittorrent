@@ -106,7 +106,7 @@ class Peer:
                             self.downloading=0
                         elif msg_id==8:
                             generate_heading("Cancel")
-                        generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
+                        # generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                             piece_no = self.get_piece_index()
                             if self.present_bits[piece_no]==1:
@@ -118,7 +118,7 @@ class Peer:
                             self.send_request_message(writer,piece_no,block_offset,block_length)
                         else:
                             self.send_keep_alive(writer)
-                            print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
+                            # print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
 
                 except Exception as e:
                     pass
