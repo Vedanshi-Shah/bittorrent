@@ -102,7 +102,7 @@ class Peer:
                         elif msg_id==6:
                             generate_heading("Request")
                         elif msg_id==7:
-                            generate_heading(f"Piece Recieved from {self.ip} | {self.port}")
+                            generate_heading(f"Piece Received from {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             offset+=4
                             block_offset=struct.unpack_from("!i",recv_data,offset)[0]
@@ -125,6 +125,7 @@ class Peer:
                                 block_offset,block_length,status = self.find_next_block(piece_no)
                                 if (status==True):
                                     generate_heading(f"Done : Completed piece {piece_no}")
+                                generate_heading(f"Requesting {piece_no}")
                                 self.send_request_message(writer,piece_no,block_offset,block_length)
                         current = round(time.time())
                         if (current>self.began_at + 120):

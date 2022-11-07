@@ -51,6 +51,7 @@ class Tracker:
     def write_block(self,piece_index,block_offset,block_data,ip,port):
         if(math.ceil(block_offset/2**14)==self.num_blocks-1):
             self.piece_status[piece_index]=1
+            generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
             self.downloading_piece=None
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
         if(sum(self.piece_status)==4):
@@ -119,11 +120,11 @@ class Tracker:
                 return (self.downloading_piece, False)
         elif(self.state==1):
             #rarest first
-            # generate_heading("In rarest first")
+            generate_heading("In rarest first")
             if(self.downloading_piece== None):
                 while True:
                     piece_index=self.get_rarest_piece()
-                    # generate_heading(f"Piece index: {piece_index}")
+                    generate_heading(f"Piece index: {piece_index}")
                     self.downloading_piece=piece_index
                     break
                 return (self.downloading_piece, False)
