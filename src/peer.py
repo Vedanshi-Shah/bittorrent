@@ -60,7 +60,6 @@ class Peer:
                 self.present_bits[i] = 0
     async def begin(self):
         try:
-            generate_heading(f"{self.ip} | {self.port} was called")
             reader,writer=await asyncio.open_connection(self.ip,self.port)
             await self.send_handshake(reader,writer)
             await self.send_interested(writer)
@@ -119,7 +118,7 @@ class Peer:
                         else:
                             self.send_keep_alive(writer)
                             # print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
-
+                
                 except Exception as e:
                     pass
         except Exception as e:

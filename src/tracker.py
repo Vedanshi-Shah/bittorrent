@@ -10,6 +10,7 @@ import sys
 import math
 import asyncio
 BLOCK_LENGTH = 2**14
+import numpy as np
 
 class Tracker:
     def __init__(self,filename):
@@ -40,6 +41,7 @@ class Tracker:
             generate_heading(f"Num blocks: {self.num_blocks}")
             self.create_piece_dict()
             self.downloading_piece = None
+            self.state=0 #0 for random first, 1 for rarest first & 2 for endgame
     
     def create_piece_dict(self):
         blocks = {}
@@ -53,6 +55,8 @@ class Tracker:
         generate_heading(f"Received from {ip}, {port}")
         generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
+        if(sum(self.piece_status)==4):
+            self.state=1
         # if (len(self.pieces[piece_index])==self.no_pieces):
         #     self.piece_status[piece_index] = 1
         #     self.downloading_piece = None
@@ -86,24 +90,43 @@ class Tracker:
         #fill 4 pieces at random first
         generate_heading(f"No. of Peers: {len(self.peers)}")
         await asyncio.gather(*([peer.begin() for peer in self.peers]))
-    
+
+    def get_rarest_piece(self):
+        piece_available_freq=np.array([0]*self.no_pieces)
+        piece_available_freq=[piece_available_freq+np.array(p.present_bits) for p in self.peers]
+        min_ele=np.argmin(piece_available_freq)
+        return min_ele
+        
     def get_piece_index(self):
-        if (self.downloading_piece==None):
-            while True:
-                piece_index = random.randint(0,self.no_pieces-1)
-                if (self.piece_status[piece_index]):
-                    continue
-                else:
-                    generate_heading(f"Piece index: {piece_index}")
-                    self.downloading_piece = piece_index
-                    break
-            return self.downloading_piece
-        else:
-            return self.downloading_piece
-        # random_pieces=random.choices(range(0,self.no_pieces),k=4)
-        # self.k=0
-        # while(sum(self.piece_status)<4):
-            # generate_heading(f"Piece Number: {random_pieces[self.k]}")
+        if(self.state==0):
+            #random first
+            if (self.downloading_piece==None):
+                while True:
+                    piece_index = random.randint(0,self.no_pieces-1)
+                    if (self.piece_status[piece_index]):
+                        continue
+                    else:
+                        generate_heading(f"Piece index: {piece_index}")
+                        self.downloading_piece = piece_index
+                        break
+                return self.downloading_piece
+            else:
+                return self.downloading_piece
+        elif(self.state==1):
+            #rarest first
+            generate_heading("In rarest first")
+            if(self.downloading_piece== None):
+                while True:
+                    piece_index=self.get_rarest_piece()
+                    if(self.piece_status[piece_index]):
+                        continue
+                    else:
+                        generate_heading(f"Piece index: {piece_index}")
+                        self.downloading_piece=piece_index
+                        break
+                return self.downloading_piece
+            else:
+                return self.downloading_piece
 
     def message_peers(self):
         i=0
