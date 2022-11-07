@@ -52,14 +52,9 @@ class Tracker:
         if(math.ceil(block_offset/2**14)==self.num_blocks-1):
             self.piece_status[piece_index]=1
             self.downloading_piece=None
-        generate_heading(f"Received from {ip}, {port}")
-        generate_heading(f"Writing {piece_index} with block offset={block_offset} and block length={len(block_data)}")
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
         if(sum(self.piece_status)==4):
             self.state=1
-        # if (len(self.pieces[piece_index])==self.no_pieces):
-        #     self.piece_status[piece_index] = 1
-        #     self.downloading_piece = None
 
     def find_next_block(self, piece_index):
         # print("Here")
@@ -81,7 +76,7 @@ class Tracker:
         generate_heading(f"Sending interested to ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
         b=self.peers[peer_index].send_interested(client)
         if(b["status"]==0):
-            print("ergrg")
+            # print("ergrg")
             return 0
         return 1
 
@@ -93,11 +88,21 @@ class Tracker:
 
     def get_rarest_piece(self):
         piece_available_freq=np.array([0]*self.no_pieces)
-        piece_available_freq=[piece_available_freq+np.array(p.present_bits) for p in self.peers]
-        min_ele=np.argmin(piece_available_freq)
-        return min_ele
+        for peer in self.peers:
+            piece_available_freq += peer.present_bits
+        min_elems = np.argsort(piece_available_freq)
+        # print(min_elems[:3])
+        for elem in min_elems:
+            if (self.piece_status[elem]):
+                continue
+            else:
+                return elem
+        print("I shouldn't have been here")
         
     def get_piece_index(self):
+        if (sum(self.piece_status)==self.no_pieces):
+            return (None, True)
+
         if(self.state==0):
             #random first
             if (self.downloading_piece==None):
@@ -106,27 +111,24 @@ class Tracker:
                     if (self.piece_status[piece_index]):
                         continue
                     else:
-                        generate_heading(f"Piece index: {piece_index}")
+                        # generate_heading(f"Piece index: {piece_index}")
                         self.downloading_piece = piece_index
                         break
-                return self.downloading_piece
+                return (self.downloading_piece, False)
             else:
-                return self.downloading_piece
+                return (self.downloading_piece, False)
         elif(self.state==1):
             #rarest first
-            generate_heading("In rarest first")
+            # generate_heading("In rarest first")
             if(self.downloading_piece== None):
                 while True:
                     piece_index=self.get_rarest_piece()
-                    if(self.piece_status[piece_index]):
-                        continue
-                    else:
-                        generate_heading(f"Piece index: {piece_index}")
-                        self.downloading_piece=piece_index
-                        break
-                return self.downloading_piece
+                    # generate_heading(f"Piece index: {piece_index}")
+                    self.downloading_piece=piece_index
+                    break
+                return (self.downloading_piece, False)
             else:
-                return self.downloading_piece
+                return (self.downloading_piece, False)
 
     def message_peers(self):
         i=0
@@ -145,7 +147,7 @@ class Tracker:
                 # if i == len(self.peers):
                 #     print("No peers connecting")
                 #     return
-        print(self.no_pieces)
+        # print(self.no_pieces)
         self.peers[i].read_and_write_messages(client)
 
     def get_peers(self):
@@ -172,7 +174,7 @@ class Tracker:
                 responses.append(response_dict)
             except Exception as e:
                 if(i==len(self.tracker_urls)-1):
-                    print("Could not connect to any peers")
+                    # print("Could not connect to any peers")
                     exit(1)
             i+=1
         self.peers=[]

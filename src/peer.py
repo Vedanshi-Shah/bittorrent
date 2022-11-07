@@ -5,6 +5,9 @@ import sys
 import random
 from prettify import generate_heading, keys_values
 import asyncio
+import numpy as np
+import time
+
 class Peer:
     def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index):
         self.ip=ip
@@ -17,7 +20,7 @@ class Peer:
         self.downloading = 0
         self.id=peer_id
         self.remote_id=''
-        self.present_bits=[0]*no_pieces
+        self.present_bits=np.array([0]*no_pieces)
         self.no_pieces = no_pieces
         self.find_next_block = find_next_block
         self.write_block = write_block
@@ -41,10 +44,11 @@ class Peer:
         payload += struct.pack("!i", block_offset)
         payload += struct.pack("!i", block_length)
         req_message += payload
-        print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
+        # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
         writer.write(req_message)
     
     def send_keep_alive(self, writer):
+        generate_heading("Sending Keep Alive")
         keep_alive_message = struct.pack("!I",0)
         writer.write(keep_alive_message)
     
@@ -64,6 +68,9 @@ class Peer:
             await self.send_handshake(reader,writer)
             await self.send_interested(writer)
             self.am_interested=1
+
+            self.began_at = round(time.time())
+
             while True:
                 try:
                     recv_data=await asyncio.wait_for(reader.read(65535),2)
@@ -107,17 +114,22 @@ class Peer:
                             generate_heading("Cancel")
                         # generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
-                            piece_no = self.get_piece_index()
+                            piece_no,piece_status = self.get_piece_index()
+
+                            if piece_status==True:
+                                writer.close()
+                                break
+
                             if self.present_bits[piece_no]==1:
                                 self.downloading=1
                                 block_offset,block_length,status = self.find_next_block(piece_no)
-                            if (status==True):
-                                generate_heading(f"Done {self.ip} | {self.port}")
-                                return
-                            self.send_request_message(writer,piece_no,block_offset,block_length)
-                        else:
+                                if (status==True):
+                                    generate_heading(f"Done : Completed piece {piece_no}")
+                                self.send_request_message(writer,piece_no,block_offset,block_length)
+                        current = round(time.time())
+                        if (current>self.began_at + 120):
+                            self.began_at = current
                             self.send_keep_alive(writer)
-                            # print(f"Piece with index ({piece_index}) was not found with the peer {self.ip, self.port, self.id}")
                 
                 except Exception as e:
                     pass
