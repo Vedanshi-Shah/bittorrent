@@ -175,9 +175,9 @@ class Tracker:
                 response_dict=bencodepy.decode(announce_response)
                 responses.append(response_dict)
             except Exception as e:
+                print(e)
                 if(i==len(self.tracker_urls)-1):
                     print("Could not connect to any peers")
-                    exit(1)
             i+=1
         self.peers=[]
         piport=[]
