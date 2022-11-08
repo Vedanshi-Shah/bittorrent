@@ -83,10 +83,12 @@ class Tracker:
         return 1
 
     async def start_messaging(self):
+
+        await asyncio.gather(*[(peer.connect() for peer in self.peers)])
         self.create_piece_dict()
         #fill 4 pieces at random first
         generate_heading(f"No. of Peers: {len(self.peers)}")
-        await asyncio.gather(*([peer.begin() for peer in self.peers]))
+        await asyncio.gather(*([peer.begin() for peer in self.peers if peer.writer!=None and peer.reader!=None]))
 
     def get_rarest_piece(self):
         piece_available_freq=np.array([0]*self.no_pieces)
