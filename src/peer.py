@@ -122,9 +122,7 @@ class Peer:
 
                             if self.present_bits[piece_no]==1:
                                 self.downloading=1
-                                block_offset,block_length,status = self.find_next_block(piece_no)
-                                if (status==True):
-                                    generate_heading(f"Done : Completed piece {piece_no}")
+                                block_offset,block_length = self.find_next_block(piece_no)
                                 generate_heading(f"Requesting {piece_no}")
                                 self.send_request_message(writer,piece_no,block_offset,block_length)
                         current = round(time.time())

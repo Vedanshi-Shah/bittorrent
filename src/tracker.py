@@ -42,6 +42,7 @@ class Tracker:
             self.create_piece_dict()
             self.downloading_piece = None
             self.state=0 #0 for random first, 1 for rarest first & 2 for endgame
+            generate_heading(f"No. of Pieces: {self.no_pieces}")
     
     def create_piece_dict(self):
         blocks = {}
@@ -64,10 +65,10 @@ class Tracker:
         for i in range(self.num_blocks):
             if (i not in self.pieces[piece_index]):
                 flag = True
-                return (2**14*i,2**14,False)
+                return (2**14*i,2**14)
         if (not(flag)):
             print("don't be here, fool!!!!!!!!!")
-            return (0,0,True)
+            return (0,0)
     
     def try_handshake(self,client,peer_index):
         generate_heading(f"Handshaking with ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
@@ -175,7 +176,7 @@ class Tracker:
                 responses.append(response_dict)
             except Exception as e:
                 if(i==len(self.tracker_urls)-1):
-                    # print("Could not connect to any peers")
+                    print("Could not connect to any peers")
                     exit(1)
             i+=1
         self.peers=[]
