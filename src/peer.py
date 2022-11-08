@@ -50,9 +50,11 @@ class Peer:
         decoded_recv_data = struct.unpack("!b19sq20s20s", s[:68])
         if decoded_recv_data[3] != self.info_hash:
             raise Exception("Invalid Peer Connection")
+
     async def connect(self):
         try:
-            self.reader,self.writer=await asyncio.open_connection(self.ip,self.port)
+            print(self.ip, self.port)
+            self.reader,self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip,self.port),4)
             
         except Exception as e:
             self.reader=None
@@ -60,9 +62,9 @@ class Peer:
             print(e)
 
     async def send_request_message(self,piece_index,block_offset,block_length):
-        req_message=struct.pack("!IB",13,6)
         # Index, Block Offset, Block length
         print(piece_index, block_offset, block_length)
+        req_message=struct.pack("!IB",13,6)
         payload = struct.pack("!i", piece_index)
         payload += struct.pack("!i", block_offset)
         payload += struct.pack("!i", block_length)

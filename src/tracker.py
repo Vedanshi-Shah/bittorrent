@@ -34,6 +34,7 @@ class Tracker:
             self.uploaded=0
             self.downloaded=0
             self.left=self.file_length-self.downloaded
+            print(self.file_length, self.piece_length, self.file_length/self.piece_length)
             self.no_pieces=math.ceil(self.file_length/self.piece_length)
             self.piece_status=[0]*self.no_pieces
             self.pieces = {}
@@ -43,6 +44,8 @@ class Tracker:
             self.downloading_piece = None
             self.state=0 #0 for random first, 1 for rarest first & 2 for endgame
             generate_heading(f"No. of Pieces: {self.no_pieces}")
+            self.last_piece_length = self.file_length-(self.no_pieces-1)*self.piece_length
+            self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
     
     def create_piece_dict(self):
         blocks = {}
@@ -50,6 +53,7 @@ class Tracker:
             self.pieces[i] = {}
     
     def write_block(self,piece_index,block_offset,block_data,ip,port):
+        # Correct for last piece
         if(math.ceil(block_offset/2**14)==self.num_blocks-1):
             self.piece_status[piece_index]=1
             generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
@@ -57,15 +61,31 @@ class Tracker:
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
         if(sum(self.piece_status)==4):
             self.state=1
+    
+    def get_last_piece(self):
+        piece_index = self.no_pieces-1
+        i = 0
+
+        for i in range(self.num_blocks_last-1):
+            if (i not in self.pieces[piece_index]):
+                return (2**14*i,2**14)
+        last_length = self.last_piece_length-(self.num_blocks_last-1)*(2**14)
+        generate_heading(f"Calling the last block for length of {last_length}")
+        return (2**14*i,last_length)
 
     def find_next_block(self, piece_index):
-        # print("Here")
-        # print(self.pieces, piece_index)
         flag = False
+        i = 0
+
+        if (piece_index==self.no_pieces-1):
+            generate_heading("Looking at the last piece")
+            self.get_last_piece()
+
         for i in range(self.num_blocks):
             if (i not in self.pieces[piece_index]):
                 flag = True
                 return (2**14*i,2**14)
+
         if (not(flag)):
             print("don't be here, fool!!!!!!!!!")
             return (0,0)
@@ -84,7 +104,7 @@ class Tracker:
 
     async def start_messaging(self):
 
-        await asyncio.gather(*[(peer.connect() for peer in self.peers)])
+        await asyncio.gather(*([peer.connect() for peer in self.peers]))
         self.create_piece_dict()
         #fill 4 pieces at random first
         generate_heading(f"No. of Peers: {len(self.peers)}")
