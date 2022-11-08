@@ -54,13 +54,29 @@ class Tracker:
     
     def write_block(self,piece_index,block_offset,block_data,ip,port):
         # Correct for last piece
-        if(math.ceil(block_offset/2**14)==self.num_blocks-1):
+        if(piece_index==self.no_pieces-1):
+            if(math.ceil(block_offset/2**14)==self.num_blocks_last-1):
+                self.piece_status[piece_index]=1
+                print(self.piece_status)
+                self.downloading_piece=None
+        elif(math.ceil(block_offset/2**14)==self.num_blocks-1):
             self.piece_status[piece_index]=1
+            print(self.piece_status)
             generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
             self.downloading_piece=None
         self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
         if(sum(self.piece_status)==4):
             self.state=1
+
+    # def write_block(self,piece_index,block_offset,block_data,ip,port):
+    #     # Correct for last piece
+    #     if(math.ceil(block_offset/2**14)==self.num_blocks-1):
+    #         self.piece_status[piece_index]=1
+    #         generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
+    #         self.downloading_piece=None
+    #     self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
+    #     if(sum(self.piece_status)==4):
+    #         self.state=1
     
     def get_last_piece(self):
         piece_index = self.no_pieces-1
@@ -79,7 +95,7 @@ class Tracker:
 
         if (piece_index==self.no_pieces-1):
             generate_heading("Looking at the last piece")
-            self.get_last_piece()
+            return self.get_last_piece()
 
         for i in range(self.num_blocks):
             if (i not in self.pieces[piece_index]):
@@ -103,12 +119,18 @@ class Tracker:
         return 1
 
     async def start_messaging(self):
-
-        await asyncio.gather(*([peer.connect() for peer in self.peers]))
+        generate_heading(f"Peer list")
+        peer = self.peers[1]
+        print(peer.ip, peer.port)
+        # await asyncio.gather(*([peer.connect() for peer in self.peers]))
+        # await asyncio.gather(*([peer.connect()]))
+        peer.connect()
         self.create_piece_dict()
         #fill 4 pieces at random first
         generate_heading(f"No. of Peers: {len(self.peers)}")
-        await asyncio.gather(*([peer.begin() for peer in self.peers if peer.writer!=None and peer.reader!=None]))
+        peer.begin()
+        # await asyncio.gather(*([peer.begin()]))
+        # await asyncio.gather(*([peer.begin() for peer in self.peers if peer.writer!=None and peer.reader!=None]))
 
     def get_rarest_piece(self):
         piece_available_freq=np.array([0]*self.no_pieces)
@@ -196,7 +218,7 @@ class Tracker:
                 announce_response=requests.get(url,params).content
                 response_dict=bencodepy.decode(announce_response)
                 responses.append(response_dict)
-            except Exception as e:
+            except (Exception,) as e:
                 print(e)
                 if(i==len(self.tracker_urls)-1):
                     print("Could not connect to any peers")

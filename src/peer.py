@@ -27,41 +27,53 @@ class Peer:
         self.get_piece_index = get_piece_index
         self.reader=None
         self.writer=None
-
+        self.in_download_block = None
+        self.in_download_piece = None
+        self.in_download_length = None
     
-    async def send_interested(self):
+    def send_interested(self):
         # try:
         interested_msg=struct.pack("!Ib",1,2)
-        self.writer.write(interested_msg)
-        await self.writer.drain()
+        # self.writer.write(interested_msg)
+        # self.writer.drain()
+        self.sock.send(interested_msg)
         # except Exception as e:
         #     print("Here")
         #     print(e)
         #     return {"status":0}
-    async def send_handshake(self):
+
+    def send_handshake(self):
         generate_heading(f"Sending Handshake to {self.ip} | {self.port}")
         handshake_msg=struct.pack("!b19sq20s20s",19,"BitTorrent protocol".encode(),0,self.info_hash,self.id.encode())
-        self.writer.write(handshake_msg)
-        await self.writer.drain()
+        self.sock.send(handshake_msg)
+        # self.writer.write(handshake_msg)
+        # self.writer.drain()
         s=b''
         # Can receive a BitField after handshake
-        while len(s)<68:
-            s+=await asyncio.wait_for(self.reader.read(65535),10) # wait for 10 seconds to receive data
+        # s+=asyncio.wait_for(self.reader.read(65535),10) # wait for 10 seconds to receive data
+        s+=self.sock.recv(68)
+        # s+=self.sock.recv(68)
+        if (len(s)<68):
+            generate_heading("Corrupted message")
+            return
         decoded_recv_data = struct.unpack("!b19sq20s20s", s[:68])
         if decoded_recv_data[3] != self.info_hash:
             raise Exception("Invalid Peer Connection")
 
-    async def connect(self):
+    def connect(self):
         try:
             print(self.ip, self.port)
-            self.reader,self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip,self.port),4)
+            # self.reader,self.writer = asyncio.wait_for(asyncio.open_connection(self.ip,self.port),4)
+            self.sock = socket(AF_INET, SOCK_STREAM)
+            self.sock.settimeout(3)
+            self.sock.connect((self.ip, self.port))
             
-        except Exception as e:
+        except (Exception,) as e:
             self.reader=None
             self.writer=None
             print(e)
 
-    async def send_request_message(self,piece_index,block_offset,block_length):
+    def send_request_message(self,piece_index,block_offset,block_length):
         # Index, Block Offset, Block length
         print(piece_index, block_offset, block_length)
         req_message=struct.pack("!IB",13,6)
@@ -69,15 +81,18 @@ class Peer:
         payload += struct.pack("!i", block_offset)
         payload += struct.pack("!i", block_length)
         req_message += payload
-        # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
-        self.writer.write(req_message)
-        await self.writer.drain()
+        # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length}) from {self.ip} | {self.port}...")
+        # self.writer.write(req_message)
+        # self.writer.drain()
+        self.sock.send(req_message)
+        generate_heading("Request sent")
     
-    async def send_keep_alive(self):
+    def send_keep_alive(self):
         generate_heading("Sending Keep Alive")
         keep_alive_message = struct.pack("!I",0)
-        self.writer.write(keep_alive_message)
-        await self.writer.drain()
+        # self.writer.write(keep_alive_message)
+        # self.writer.drain()
+        self.sock.send(keep_alive_message)
     
     def update_bitfield(self, piece_index):
         generate_heading(f"Updated {self.ip} | {self.port}: {bitstring}")
@@ -91,20 +106,20 @@ class Peer:
                 self.present_bits[i] = 1
             else:
                 self.present_bits[i] = 0
-    
 
-    async def begin(self):
+    def begin(self):
         try:
-            # reader,writer=await asyncio.open_connection(self.ip,self.port)
-            await self.send_handshake()
-            await self.send_interested()
+            # reader,writer=asyncio.open_connection(self.ip,self.port)
+            self.send_handshake()
+            self.send_interested()
             self.am_interested=1
 
             self.began_at = round(time.time())
 
             while True:
                 try:
-                    recv_data=await asyncio.wait_for(self.reader.read(65535),2)
+                    # recv_data=asyncio.wait_for(self.reader.read(65535),2)
+                    recv_data = self.sock.recv(65535)
                     if len(recv_data)>4:
                         offset=0
                         msg_len=struct.unpack_from("!i",recv_data)[0]
@@ -147,24 +162,32 @@ class Peer:
                         # generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                             piece_no,piece_status = self.get_piece_index()
-
                             if piece_status==True:
-                                self.writer.close()
+                                # self.writer.close()
+                                generate_heading("Done")
+                                self.sock.close()
                                 break
-                            print(self.present_bits,"=============",piece_no)
+                            print(self.present_bits)
                             if self.present_bits[piece_no]==1:
                                 self.downloading=1
                                 block_offset,block_length = self.find_next_block(piece_no)
                                 generate_heading(f"Requesting {piece_no}")
-                                await self.send_request_message(piece_no,block_offset,block_length)
-                        current = round(time.time())
-                        if (current>self.began_at + 120):
-                            self.began_at = current
-                            await self.send_keep_alive()
-                
-                except Exception as e:
+                                self.send_request_message(piece_no,block_offset,block_length)
+                                self.in_download_piece = piece_no
+                                self.in_download_block = block_offset
+                                self.in_download_length = block_length
+                except (Exception,) as e:
+                    if (self.in_download_piece!=None):
+                        generate_heading(f"Requesting {self.in_download_piece} again")
+                        self.send_request_message(self.in_download_piece,self.in_download_block,self.in_download_length)
+                    print(f"Error: {e}")
                     pass
-        except Exception as e:
+                else:
+                    current = round(time.time())
+                    if (current>self.began_at + 120):
+                        self.began_at = current
+                        self.send_keep_alive()
+        except (Exception,) as e:
             print(e)
 
 
