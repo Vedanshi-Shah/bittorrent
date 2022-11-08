@@ -51,7 +51,7 @@ class Tracker:
             self.block_heap=[]
     
     def rerequest_piece(self):
-        exp_blocks=[b for b in self.block_heap if b.began_requesting+2<time.time()]
+        exp_blocks=[b for b in self.block_heap if b.began_requesting+20<time.time()]
         if(len(exp_blocks)>0):
             i=np.random.randint(0,len(exp_blocks))
             return (self.block_heap[i].piece,self.block_heap[i].offset,self.block_heap[i].size,False)
@@ -167,7 +167,7 @@ class Tracker:
             generate_heading("All done")
             return (None, True,False)
         #check if any block has timedout
-        if(len(self.block_heap) and self.block_heap[0].began_requesting+2<time.time()):
+        if(len(self.block_heap) and self.block_heap[0].began_requesting+20<time.time()):
             generate_heading(f"Re-Requesting {self.block_heap[0].piece} | {self.block_heap[0].offset} | heap_size: {len(self.block_heap)}")
             return (self.block_heap[0].piece,False,True)
         if(self.state==0):
@@ -194,26 +194,6 @@ class Tracker:
                 return (self.downloading_piece, False,False)
             else:
                 return (self.downloading_piece, False,False)
-
-    # def message_peers(self):
-    #     i=0
-    #     while True and i<len(self.peers):
-    #         try:
-    #             client=socket(AF_INET,SOCK_STREAM)
-    #             client.settimeout(5)
-    #             client.connect((self.peers[i].ip, self.peers[i].port))
-    #             status = self.try_handshake(client, i)
-    #             if status:
-    #                 break
-    #             i+=1
-    #         except (OSError,) as e:
-    #             print(e)
-    #             i += 1
-    #             # if i == len(self.peers):
-    #             #     print("No peers connecting")
-    #             #     return
-    #     # print(self.no_pieces)
-    #     self.peers[i].read_and_write_messages(client)
 
     def get_peers(self):
         if(self.peer_id==''):

@@ -154,24 +154,29 @@ class Peer:
                         elif msg_id==6:
                             generate_heading(f"Request {self.ip} | {self.port}")
                         elif msg_id==7:
+                            s=recv_data[5:]
+                            while(len(s)<msg_len-1):
+                                s+=await asyncio.wait_for(self.reader.read(msg_len-1),20)
                             generate_heading(f"Piece Received from {self.ip} | {self.port}")
-                            piece_index=struct.unpack_from("!i",recv_data,offset)[0]
+                            offset=0
+                            piece_index=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
-                            block_offset=struct.unpack_from("!i",recv_data,offset)[0]
+                            block_offset=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
-                            block=recv_data[offset:]
+                            block=s[offset:]
+                            generate_heading(f"block length: {len(block)}")
+                            print(block)
                             self.write_block(piece_index,block_offset,block)
                             self.downloading=0
                         elif msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
-                        generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
+                    # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                             piece_no,piece_status,exp = self.get_piece_index()
                             print(piece_no,piece_status,exp)
                             print(f"Here 1 {piece_no}")
                             if piece_status==True:
                                 self.writer.close()
-                                generate_heading(f"meow meow meow {self.ip} | {self.port}")
                                 break
                             if self.present_bits[piece_no]==1:
                                 print(f"Here 2")
@@ -190,11 +195,18 @@ class Peer:
                 
                 except Exception as e:
                     # self.downloading=0
-                    (pno,bo,bl,st)=self.rerequest_piece()
-                    if(st==True):
+                    p,ps,_=self.get_piece_index()
+                    if(ps==True):
+                        self.writer.close()
+                        break
+                    if(self.downloading==0):
                         pass
                     else:
-                        self.send_request_message(pno,bo,bl)
+                        (pno,bo,bl,st)=self.rerequest_piece()
+                        if(st==True):
+                            pass
+                        else:
+                            self.send_request_message(pno,bo,bl)
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
                     # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     # print(exc_type, fname, exc_tb.tb_lineno)
