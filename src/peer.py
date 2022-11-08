@@ -9,7 +9,7 @@ import numpy as np
 import time
 import os
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,write_file):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,complete):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -31,8 +31,8 @@ class Peer:
         self.reader=None
         self.writer=None
         self.rerequest_piece=rerequest_piece
-        self.write_file = write_file
-        self.timeout = 2
+        self.complete = complete
+
     
     async def send_interested(self):
         # try:
@@ -113,26 +113,6 @@ class Peer:
                 self.present_bits[i] = 1
             else:
                 self.present_bits[i] = 0
-    
-    async def read_until_complete(self):
-        iter = 42
-        generate_heading("Here")
-        while True:
-            recv_data = await self.reader.read(65535)
-            offset=0
-            msg_len=struct.unpack_from("!i",recv_data)[0]
-            offset+=4
-            msg_id=struct.unpack_from("!B",recv_data,offset)[0]
-            offset+=1
-            piece_index=struct.unpack_from("!i",recv_data,offset)[0]
-            offset+=4
-            block_offset=struct.unpack_from("!i",recv_data,offset)[0]
-            offset+=4
-            block=recv_data[offset:]
-            generate_heading(iter)
-            print(block)
-            iter+=1
-            print()
 
     async def begin(self):
         try:
@@ -142,24 +122,11 @@ class Peer:
             self.am_interested=1
 
             self.began_at = round(time.time())
-            flag = True
 
             while True:
                 try:
-                    print("Here")
-                    recv_data=await self.reader.read()
-                    if (flag==False):
-                        offset=0
-                        msg_len=struct.unpack_from("!i",recv_data)[0]
-                        offset+=4
-                        msg_id=struct.unpack_from("!B",recv_data,offset)[0]
-                        offset+=1
-                        piece_index=struct.unpack_from("!i",recv_data,offset)[0]
-                        offset+=4
-                        block_offset=struct.unpack_from("!i",recv_data,offset)[0]
-                        offset+=4
-                        block=recv_data[offset:]
-                    if len(recv_data)>4 and flag==True:
+                    recv_data=await asyncio.wait_for(self.reader.read(65535),2)
+                    if len(recv_data)>4:
                         offset=0
                         msg_len=struct.unpack_from("!i",recv_data)[0]
                         offset+=4
@@ -188,28 +155,29 @@ class Peer:
                         elif msg_id==6:
                             generate_heading(f"Request {self.ip} | {self.port}")
                         elif msg_id==7:
+                            s=recv_data[5:]
+                            while(len(s)<msg_len-1):
+                                s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
                             generate_heading(f"Piece Received from {self.ip} | {self.port}")
-                            piece_index=struct.unpack_from("!i",recv_data,offset)[0]
+                            offset=0
+                            piece_index=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
-                            block_offset=struct.unpack_from("!i",recv_data,offset)[0]
+                            block_offset=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
-                            block=recv_data[offset:]
-                            generate_heading(f"Entire data length: {len(recv_data)} | Message Length: {len(block)}")
-                            self.write_block(piece_index,block_offset,block)
-                            # await self.read_until_complete()
-                            flag = False
-                            # self.downloading=0
+                            block=s[offset:]
+                            generate_heading(f"block length: {len(block)}")
+                            await self.write_block(piece_index,block_offset,block)
+                            self.downloading=0
                         elif msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
-                        # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
+                    # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                             piece_no,piece_status,exp = self.get_piece_index()
                             print(piece_no,piece_status,exp)
                             print(f"Here 1 {piece_no}")
                             if piece_status==True:
                                 self.writer.close()
-                                generate_heading(f"meow meow meow {self.ip} | {self.port}")
-                                self.write_file()
+                                self.complete()
                                 break
                             if self.present_bits[piece_no]==1:
                                 print(f"Here 2")
@@ -227,18 +195,19 @@ class Peer:
                             self.send_keep_alive()
                 
                 except Exception as e:
-                    print("Error")
-                    # (pno,bo,bl,st)=self.rerequest_piece()
-                    # if (self.downloading==0):
-                    #     pass
-                    # else:
-                    #     # self.downloading=0
-                    #     self.send_request_message(pno,bo,bl)
-                    #     if(st==True):
-                    #         pass
-                    # if st==True:
-                    #     self.writer.close()
-                    pass
+                    # self.downloading=0
+                    p,ps,_=self.get_piece_index()
+                    if(ps==True):
+                        self.writer.close()
+                        break
+                    if(self.downloading==0):
+                        pass
+                    else:
+                        (pno,bo,bl,st)=self.rerequest_piece()
+                        if(st==True):
+                            pass
+                        else:
+                            self.send_request_message(pno,bo,bl)
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
                     # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     # print(exc_type, fname, exc_tb.tb_lineno)

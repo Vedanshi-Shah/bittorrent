@@ -50,6 +50,11 @@ class Tracker:
             self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
             self.block_heap=[]
             self.get_pieces_hashes()
+            self.print_hashes()
+    
+    def print_hashes(self):
+        for idx,hash in self.hashes.items():
+            print(f"{idx} : {hash}")
     
     def get_pieces_hashes(self):
         start = 0
@@ -59,6 +64,10 @@ class Tracker:
             self.hashes[i] = self.pieces_info[start:start+offset]
             start+=offset
     
+    def create_piece_dict(self):
+        for i in range(self.no_pieces):
+            self.pieces[i] = {}
+    
     def rerequest_piece(self):
         exp_blocks=[b for b in self.block_heap if b.began_requesting+20<time.time()]
         if(len(exp_blocks)>0):
@@ -67,37 +76,54 @@ class Tracker:
         else:
             print("meow")
             return (None,None,None,True)
-
-    def create_piece_dict(self):
-        for i in range(self.no_pieces):
-            self.pieces[i] = {}
     
-    def write_piece(self,piece_index,data):
+    def is_piece_complete(self,piece_index):
+        count = 0
+        for block in self.pieces[piece_index].values():
+            if block.data!=b"":
+                count += 1
+        if (piece_index==self.no_pieces-1 and count==self.num_blocks_last):
+            return True
+        if (count==self.num_blocks):
+            return True
+        return False
+    
+    async def verify_piece(self,piece_index):
+        my_piece = self.pieces[piece_index]
+        data = b""
+        for block in my_piece.values():
+            data += block.data
+        hash = await hashlib.sha1(data)
+        hash = await hash.digest()
+        if (hash!=self.hashes[piece_index]):
+            self.pieces[piece_index] = {}
+            self.piece_status[piece_index] = 0
+            generate_heading("Corrupted piece")
+            return False,None
+        return True,data
+    
+    async def write_piece(self,piece_index,data):
+        generate_heading("Piece verified and being written")
         with open("temp.csv", "rb+") as f:
             pos = piece_index * self.piece_length
-            f.seek(pos, 0)
-            f.write(data)
-        f.close()
+            await f.seek(pos, 0)
+            await f.write(data)
+        # f.close()
     
-    def write_block(self,piece_index,block_offset,block_data):
-        # Correct for last piece
-        if(piece_index==self.no_pieces-1):
-            if(math.ceil(block_offset/2**14)==self.num_blocks_last-1):
-                self.piece_status[piece_index]=1
-                print(self.piece_status)
-                self.downloading_piece=None
-        elif(math.ceil(block_offset/2**14)==self.num_blocks-1):
-            # Verify here
-            is_verified,data = self.verify_piece(piece_index)
-            if (is_verified):
-                # If verified, write here
-                self.write_piece(piece_index,data)
-                self.piece_status[piece_index]=1
-                generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
-                self.downloading_piece=None
-
-        self.pieces[piece_index][math.ceil(block_offset/2**14)].data = block_data
+    async def write_block(self,piece_index,block_offset,block_data):
+        self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
+
+        if (self.is_piece_complete(piece_index)):
+            is_verified,data = await self.verify_piece(piece_index)
+            if (is_verified):
+                # Need to await here
+                self.downloading_piece=None
+                await self.write_piece(piece_index,data)
+                self.piece_status[piece_index]=1
+                # del self.pieces[piece_index]
+                generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
+
         print("meow",len(self.block_heap))
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
         print("meow",len(self.block_heap))
@@ -119,29 +145,16 @@ class Tracker:
         heapq.heappush(self.block_heap,a)
         self.pieces[piece_index][i]=a
         return (a.offset,a.size)
-    
-    def verify_piece(self,piece_index):
-        my_piece = self.pieces[piece_index]
-        data = b"".join([my_piece[block].data for block in my_piece])
-        hash = hashlib.sha1(data)
-        hash = hash.digest()
-        print(hash, self.hashes[piece_index])
-        if (hash!=self.hashes[piece_index]):
-            generate_heading("Corruputed message")
-            return False,None
-        else:
-            generate_heading("Successfully verified")
-            return True,data
 
     def find_next_block(self, piece_index,has_expired):
         flag = False
         i = 0
-        if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
-            print("picking expired block")
-            self.block_heap[0].began_requesting=time.time()
-            a=self.block_heap[0]
-            heapq.heapify(self.block_heap)
-            return (a.offset,a.size)
+        # if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
+        #     print("picking expired block")
+        #     self.block_heap[0].began_requesting=time.time()
+        #     a=self.block_heap[0]
+        #     heapq.heapify(self.block_heap)
+        #     return (a.offset,a.size)
         if (piece_index==self.no_pieces-1):
             print("picking block of last piece")    
             generate_heading("Looking at the last piece")
@@ -201,7 +214,7 @@ class Tracker:
             generate_heading("All done")
             return (None, True,False)
         #check if any block has timedout
-        if(len(self.block_heap) and self.block_heap[0].began_requesting+2<time.time()):
+        if(len(self.block_heap) and self.block_heap[0].began_requesting+20<time.time()):
             generate_heading(f"Re-Requesting {self.block_heap[0].piece} | {self.block_heap[0].offset} | heap_size: {len(self.block_heap)}")
             return (self.block_heap[0].piece,False,True)
         if(self.state==0):
@@ -229,36 +242,18 @@ class Tracker:
             else:
                 return (self.downloading_piece, False,False)
     
-    def write_file(self):
-        generate_heading("Writing to a file")
+    def complete(self):
         data = b""
-        for piece in self.pieces:
-            generate_heading(f"Piece index: {piece}")
-            for block in self.pieces[piece].values():
-                print(block.data)
-                data += block.data
-            print()
-        sys.exit(1)
-
-    # def message_peers(self):
-    #     i=0
-    #     while True and i<len(self.peers):
-    #         try:
-    #             client=socket(AF_INET,SOCK_STREAM)
-    #             client.settimeout(5)
-    #             client.connect((self.peers[i].ip, self.peers[i].port))
-    #             status = self.try_handshake(client, i)
-    #             if status:
-    #                 break
-    #             i+=1
-    #         except (OSError,) as e:
-    #             print(e)
-    #             i += 1
-    #             # if i == len(self.peers):
-    #             #     print("No peers connecting")
-    #             #     return
-    #     # print(self.no_pieces)
-    #     self.peers[i].read_and_write_messages(client)
+        # generate_heading("Here")
+        # for piece in self.pieces:
+        #     # print(piece)
+        #     generate_heading(f"Piece index: {piece}")
+        #     data = b""
+        #     for block in self.pieces[piece].values():
+        #         data += block.data
+        #     print(data)
+        #     print()
+        print()
 
     def get_peers(self):
         if(self.peer_id==''):
@@ -296,7 +291,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.write_file))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:
@@ -309,6 +304,6 @@ class Tracker:
                     port = struct.unpack_from("!H", p, offset)[0]
                     offset += 2
                     if((ip,port) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.write_file))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
                         piport.append((ip,port))
         # print(len(self.peers))
