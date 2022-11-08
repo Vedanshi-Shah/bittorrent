@@ -9,7 +9,7 @@ import numpy as np
 import time
 import os
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -30,9 +30,8 @@ class Peer:
         self.in_download_length = None
         self.reader=None
         self.writer=None
-        self.in_download_block = None
-        self.in_download_piece = None
-        self.in_download_length = None
+        self.rerequest_piece=rerequest_piece
+
     
     def send_interested(self):
         # try:
@@ -100,7 +99,7 @@ class Peer:
         payload += struct.pack("!i", block_offset)
         payload += struct.pack("!i", block_length)
         req_message += payload
-        # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
+        print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
         self.writer.write(req_message)
         # self.writer.drain()
     
@@ -175,9 +174,10 @@ class Peer:
                             self.downloading=0
                         elif msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
-                        # generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
+                        generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
                             piece_no,piece_status,exp = self.get_piece_index()
+                            print(piece_no,piece_status,exp)
                             print(f"Here 1 {piece_no}")
                             if piece_status==True:
                                 self.writer.close()
@@ -199,16 +199,22 @@ class Peer:
                             self.send_keep_alive()
                 
                 except Exception as e:
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print(exc_type, fname, exc_tb.tb_lineno)
-                    p,ps,_=self.get_piece_index()
-                    if(ps==True):
-                        print("Closing other peers as all pieces done")
-                        self.writer.close()
-                        break
-                    else:
+                    # self.downloading=0
+                    (pno,bo,bl,st)=self.rerequest_piece()
+                    if(st==True):
                         pass
+                    else:
+                        self.send_request_message(pno,bo,bl)
+                    # exc_type, exc_obj, exc_tb = sys.exc_info()
+                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    # print(exc_type, fname, exc_tb.tb_lineno)
+                    # p,ps,_=self.get_piece_index()
+                    # if(ps==True):
+                    #     print("Closing other peers as all pieces done")
+                    #     self.writer.close()
+                    #     break
+                    
+                    # pass
         except Exception as e:
             self.writer.close()
             print(e)

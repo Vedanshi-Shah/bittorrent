@@ -50,6 +50,14 @@ class Tracker:
             self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
             self.block_heap=[]
     
+    def rerequest_piece(self):
+        exp_blocks=[b for b in self.block_heap if b.began_requesting+2<time.time()]
+        if(len(exp_blocks)>0):
+            i=np.random.randint(0,len(exp_blocks))
+            return (self.block_heap[i].piece,self.block_heap[i].offset,self.block_heap[i].size,False)
+        else:
+            print("meow")
+            return (None,None,None,True)
     def create_piece_dict(self):
         for i in range(self.no_pieces):
             self.pieces[i] = []
@@ -66,22 +74,15 @@ class Tracker:
             print(self.piece_status)
             generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
             self.downloading_piece=None
+
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data = block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
+        print("meow",len(self.block_heap))
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
+        print("meow",len(self.block_heap))
         heapq.heapify(self.block_heap)
         if(sum(self.piece_status)==4):
             self.state=1
-
-    # def write_block(self,piece_index,block_offset,block_data,ip,port):
-    #     # Correct for last piece
-    #     if(math.ceil(block_offset/2**14)==self.num_blocks-1):
-    #         self.piece_status[piece_index]=1
-    #         generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
-    #         self.downloading_piece=None
-    #     self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
-    #     if(sum(self.piece_status)==4):
-    #         self.state=1
     
     def get_last_piece(self,piece_index):
         i = 0
@@ -101,18 +102,19 @@ class Tracker:
     def find_next_block(self, piece_index,has_expired):
         flag = False
         i = 0
-        print("picking expired block")
-        if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
-            self.block_heap[0].began_requesting=time.time()
-            a=self.block_heap[0]
-            heapq.heapify(self.block_heap)
-            return (a.offset,a.size)
-        print("picking block of last piece")
+        # if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
+        #     print("picking expired block")
+        #     self.block_heap[0].began_requesting=time.time()
+        #     a=self.block_heap[0]
+        #     heapq.heapify(self.block_heap)
+        #     return (a.offset,a.size)
         if (piece_index==self.no_pieces-1):
+            print("picking block of last piece")    
             generate_heading("Looking at the last piece")
             return self.get_last_piece(piece_index)
-        print("picking a block")
         for i in range(self.num_blocks):
+            print("picking a block")
+
             if (i not in self.pieces[piece_index]):
                 flag = True
                 a=Block(piece_index,2**14*i,2**14)
@@ -168,7 +170,8 @@ class Tracker:
             generate_heading("All done")
             return (None, True,False)
         #check if any block has timedout
-        if(len(self.block_heap) and self.block_heap[0].began_requesting+20<time.time()):
+        if(len(self.block_heap) and self.block_heap[0].began_requesting+2<time.time()):
+            generate_heading(f"Re-Requesting {self.block_heap[0].piece} | {self.block_heap[0].offset} | heap_size: {len(self.block_heap)}")
             return (self.block_heap[0].piece,False,True)
         if(self.state==0):
             #random first
@@ -251,7 +254,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:
