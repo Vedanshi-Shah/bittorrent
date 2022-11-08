@@ -11,7 +11,9 @@ import math
 import asyncio
 BLOCK_LENGTH = 2**14
 import numpy as np
-
+from Block import Block
+import heapq
+import time
 class Tracker:
     def __init__(self,filename):
         self.filename='../torrent_files/'+filename
@@ -46,13 +48,13 @@ class Tracker:
             generate_heading(f"No. of Pieces: {self.no_pieces}")
             self.last_piece_length = self.file_length-(self.no_pieces-1)*self.piece_length
             self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
+            self.block_heap=[]
     
     def create_piece_dict(self):
-        blocks = {}
         for i in range(self.no_pieces):
-            self.pieces[i] = {}
+            self.pieces[i] = []
     
-    def write_block(self,piece_index,block_offset,block_data,ip,port):
+    def write_block(self,piece_index,block_offset,block_data):
         # Correct for last piece
         if(piece_index==self.no_pieces-1):
             if(math.ceil(block_offset/2**14)==self.num_blocks_last-1):
@@ -64,7 +66,10 @@ class Tracker:
             print(self.piece_status)
             generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
             self.downloading_piece=None
-        self.pieces[piece_index][math.ceil(block_offset/2**14)] = block_data
+        self.pieces[piece_index][math.ceil(block_offset/2**14)].data = block_data
+        self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
+        self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
+        heapq.heapify(self.block_heap)
         if(sum(self.piece_status)==4):
             self.state=1
 
@@ -78,45 +83,58 @@ class Tracker:
     #     if(sum(self.piece_status)==4):
     #         self.state=1
     
-    def get_last_piece(self):
-        piece_index = self.no_pieces-1
+    def get_last_piece(self,piece_index):
         i = 0
-
         for i in range(self.num_blocks_last-1):
             if (i not in self.pieces[piece_index]):
-                return (2**14*i,2**14)
+                a=Block(piece_index,2**14*i,2**14)
+                heapq.heappush(self.block_heap,a)
+                self.pieces[piece_index][i]=a
+                return (a.offset,a.size)
         last_length = self.last_piece_length-(self.num_blocks_last-1)*(2**14)
         generate_heading(f"Calling the last block for length of {last_length}")
-        return (2**14*i,last_length)
+        a=Block(piece_index,2**14*i,last_length)
+        heapq.heappush(self.block_heap,a)
+        self.pieces[piece_index][i]=a
+        return (a.offset,a.size)
 
-    def find_next_block(self, piece_index):
+    def find_next_block(self, piece_index,has_expired):
         flag = False
         i = 0
-
+        print("picking expired block")
+        if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
+            self.block_heap[0].began_requesting=time.time()
+            a=self.block_heap[0]
+            heapq.heapify(self.block_heap)
+            return (a.offset,a.size)
+        print("picking block of last piece")
         if (piece_index==self.no_pieces-1):
             generate_heading("Looking at the last piece")
-            return self.get_last_piece()
-
+            return self.get_last_piece(piece_index)
+        print("picking a block")
         for i in range(self.num_blocks):
             if (i not in self.pieces[piece_index]):
                 flag = True
-                return (2**14*i,2**14)
+                a=Block(piece_index,2**14*i,2**14)
+                heapq.heappush(self.block_heap,a)
+                self.pieces[piece_index][i]=a
+                return (a.offset,a.size)
 
         if (not(flag)):
             print("don't be here, fool!!!!!!!!!")
             return (0,0)
     
-    def try_handshake(self,client,peer_index):
-        generate_heading(f"Handshaking with ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
-        a=self.peers[peer_index].send_handshake(client)
-        if(a["status"]==0):
-            return 0
-        generate_heading(f"Sending interested to ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
-        b=self.peers[peer_index].send_interested(client)
-        if(b["status"]==0):
-            # print("ergrg")
-            return 0
-        return 1
+    # def try_handshake(self,client,peer_index):
+    #     generate_heading(f"Handshaking with ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
+    #     a=self.peers[peer_index].send_handshake(client)
+    #     if(a["status"]==0):
+    #         return 0
+    #     generate_heading(f"Sending interested to ({self.peers[peer_index].ip}, {self.peers[peer_index].port})...")
+    #     b=self.peers[peer_index].send_interested(client)
+    #     if(b["status"]==0):
+    #         # print("ergrg")
+    #         return 0
+    #     return 1
 
     async def start_messaging(self):
         generate_heading(f"Peer list")
@@ -127,10 +145,10 @@ class Tracker:
         peer.connect()
         self.create_piece_dict()
         #fill 4 pieces at random first
-        generate_heading(f"No. of Peers: {len(self.peers)}")
-        peer.begin()
-        # await asyncio.gather(*([peer.begin()]))
-        # await asyncio.gather(*([peer.begin() for peer in self.peers if peer.writer!=None and peer.reader!=None]))
+        # generate_heading(f"No. of Peers: {len(self.peers)}")
+        self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
+        print(len(self.peers))
+        await asyncio.gather(*([peer.begin() for peer in self.peers]))
 
     def get_rarest_piece(self):
         piece_available_freq=np.array([0]*self.no_pieces)
@@ -147,8 +165,11 @@ class Tracker:
         
     def get_piece_index(self):
         if (sum(self.piece_status)==self.no_pieces):
-            return (None, True)
-
+            generate_heading("All done")
+            return (None, True,False)
+        #check if any block has timedout
+        if(len(self.block_heap) and self.block_heap[0].began_requesting+20<time.time()):
+            return (self.block_heap[0].piece,False,True)
         if(self.state==0):
             #random first
             if (self.downloading_piece==None):
@@ -160,41 +181,39 @@ class Tracker:
                         # generate_heading(f"Piece index: {piece_index}")
                         self.downloading_piece = piece_index
                         break
-                return (self.downloading_piece, False)
+                return (self.downloading_piece, False,False)
             else:
-                return (self.downloading_piece, False)
+                return (self.downloading_piece, False,False)
         elif(self.state==1):
             #rarest first
             generate_heading("In rarest first")
             if(self.downloading_piece== None):
-                while True:
-                    piece_index=self.get_rarest_piece()
-                    generate_heading(f"Piece index: {piece_index}")
-                    self.downloading_piece=piece_index
-                    break
-                return (self.downloading_piece, False)
+                piece_index=self.get_rarest_piece()
+                generate_heading(f"Piece index: {piece_index}")
+                self.downloading_piece=piece_index
+                return (self.downloading_piece, False,False)
             else:
-                return (self.downloading_piece, False)
+                return (self.downloading_piece, False,False)
 
-    def message_peers(self):
-        i=0
-        while True and i<len(self.peers):
-            try:
-                client=socket(AF_INET,SOCK_STREAM)
-                client.settimeout(5)
-                client.connect((self.peers[i].ip, self.peers[i].port))
-                status = self.try_handshake(client, i)
-                if status:
-                    break
-                i+=1
-            except (OSError,) as e:
-                print(e)
-                i += 1
-                # if i == len(self.peers):
-                #     print("No peers connecting")
-                #     return
-        # print(self.no_pieces)
-        self.peers[i].read_and_write_messages(client)
+    # def message_peers(self):
+    #     i=0
+    #     while True and i<len(self.peers):
+    #         try:
+    #             client=socket(AF_INET,SOCK_STREAM)
+    #             client.settimeout(5)
+    #             client.connect((self.peers[i].ip, self.peers[i].port))
+    #             status = self.try_handshake(client, i)
+    #             if status:
+    #                 break
+    #             i+=1
+    #         except (OSError,) as e:
+    #             print(e)
+    #             i += 1
+    #             # if i == len(self.peers):
+    #             #     print("No peers connecting")
+    #             #     return
+    #     # print(self.no_pieces)
+    #     self.peers[i].read_and_write_messages(client)
 
     def get_peers(self):
         if(self.peer_id==''):
@@ -212,17 +231,20 @@ class Tracker:
         }
         self.tracker_urls=list(set(self.tracker_urls))
         responses=[]
-        while i<len(self.tracker_urls):
-            url=self.tracker_urls[i]
-            try:
-                announce_response=requests.get(url,params).content
-                response_dict=bencodepy.decode(announce_response)
-                responses.append(response_dict)
-            except (Exception,) as e:
-                print(e)
-                if(i==len(self.tracker_urls)-1):
-                    print("Could not connect to any peers")
-            i+=1
+        loop=0
+        while(len(responses)==0 and loop<5):
+            print(f"Looping {loop+1} time")
+            i=0
+            while i<len(self.tracker_urls):
+                url=self.tracker_urls[i]
+                try:
+                    announce_response=requests.get(url,params).content
+                    response_dict=bencodepy.decode(announce_response)
+                    responses.append(response_dict)
+                except Exception as e:
+                    print(e)
+                i+=1
+            loop+=1
         self.peers=[]
         piport=[]
         for response_dict in responses:
