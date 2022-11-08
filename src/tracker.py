@@ -49,18 +49,35 @@ class Tracker:
             self.last_piece_length = self.file_length-(self.no_pieces-1)*self.piece_length
             self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
             self.block_heap=[]
+            self.get_pieces_hashes()
+    
+    def get_pieces_hashes(self):
+        start = 0
+        offset = 20
+        self.hashes = {}
+        for i in range(self.no_pieces):
+            self.hashes[i] = self.pieces_info[start:start+offset]
+            start+=offset
     
     def rerequest_piece(self):
-        exp_blocks=[b for b in self.block_heap if b.began_requesting+2<time.time()]
+        exp_blocks=[b for b in self.block_heap if b.began_requesting+20<time.time()]
         if(len(exp_blocks)>0):
             i=np.random.randint(0,len(exp_blocks))
             return (self.block_heap[i].piece,self.block_heap[i].offset,self.block_heap[i].size,False)
         else:
             print("meow")
             return (None,None,None,True)
+
     def create_piece_dict(self):
         for i in range(self.no_pieces):
-            self.pieces[i] = []
+            self.pieces[i] = {}
+    
+    def write_piece(self,piece_index,data):
+        with open("temp.csv", "rb+") as f:
+            pos = piece_index * self.piece_length
+            f.seek(pos, 0)
+            f.write(data)
+        f.close()
     
     def write_block(self,piece_index,block_offset,block_data):
         # Correct for last piece
@@ -70,10 +87,14 @@ class Tracker:
                 print(self.piece_status)
                 self.downloading_piece=None
         elif(math.ceil(block_offset/2**14)==self.num_blocks-1):
-            self.piece_status[piece_index]=1
-            print(self.piece_status)
-            generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
-            self.downloading_piece=None
+            # Verify here
+            is_verified,data = self.verify_piece(piece_index)
+            if (is_verified):
+                # If verified, write here
+                self.write_piece(piece_index,data)
+                self.piece_status[piece_index]=1
+                generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
+                self.downloading_piece=None
 
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data = block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
@@ -98,20 +119,34 @@ class Tracker:
         heapq.heappush(self.block_heap,a)
         self.pieces[piece_index][i]=a
         return (a.offset,a.size)
+    
+    def verify_piece(self,piece_index):
+        my_piece = self.pieces[piece_index]
+        data = b"".join([my_piece[block].data for block in my_piece])
+        hash = hashlib.sha1(data)
+        hash = hash.digest()
+        print(hash, self.hashes[piece_index])
+        if (hash!=self.hashes[piece_index]):
+            generate_heading("Corruputed message")
+            return False,None
+        else:
+            generate_heading("Successfully verified")
+            return True,data
 
     def find_next_block(self, piece_index,has_expired):
         flag = False
         i = 0
-        # if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
-        #     print("picking expired block")
-        #     self.block_heap[0].began_requesting=time.time()
-        #     a=self.block_heap[0]
-        #     heapq.heapify(self.block_heap)
-        #     return (a.offset,a.size)
+        if(len(self.block_heap) and has_expired and self.block_heap[0].piece==piece_index):
+            print("picking expired block")
+            self.block_heap[0].began_requesting=time.time()
+            a=self.block_heap[0]
+            heapq.heapify(self.block_heap)
+            return (a.offset,a.size)
         if (piece_index==self.no_pieces-1):
             print("picking block of last piece")    
             generate_heading("Looking at the last piece")
             return self.get_last_piece(piece_index)
+
         for i in range(self.num_blocks):
             print("picking a block")
 
@@ -139,12 +174,8 @@ class Tracker:
     #     return 1
 
     async def start_messaging(self):
-        generate_heading(f"Peer list")
-        peer = self.peers[1]
-        print(peer.ip, peer.port)
-        # await asyncio.gather(*([peer.connect() for peer in self.peers]))
-        # await asyncio.gather(*([peer.connect()]))
-        peer.connect()
+
+        await asyncio.gather(*([peer.connect() for peer in self.peers]))
         self.create_piece_dict()
         #fill 4 pieces at random first
         # generate_heading(f"No. of Peers: {len(self.peers)}")
@@ -197,6 +228,17 @@ class Tracker:
                 return (self.downloading_piece, False,False)
             else:
                 return (self.downloading_piece, False,False)
+    
+    def write_file(self):
+        generate_heading("Writing to a file")
+        data = b""
+        for piece in self.pieces:
+            generate_heading(f"Piece index: {piece}")
+            for block in self.pieces[piece].values():
+                print(block.data)
+                data += block.data
+            print()
+        sys.exit(1)
 
     # def message_peers(self):
     #     i=0
@@ -254,7 +296,7 @@ class Tracker:
             if(type(response_dict[b'peers'])==list):
                 for x in response_dict[b'peers']:
                     if((x[b'ip'].decode(),x[b'port']) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.write_file))
                         piport.append((x[b'ip'].decode(),x[b'port']))
 
             else:
@@ -267,6 +309,6 @@ class Tracker:
                     port = struct.unpack_from("!H", p, offset)[0]
                     offset += 2
                     if((ip,port) not in piport):
-                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index))
+                        self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.write_file))
                         piport.append((ip,port))
         # print(len(self.peers))
