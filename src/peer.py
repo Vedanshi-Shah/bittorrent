@@ -166,8 +166,8 @@ class Peer:
                             offset+=4
                             block=s[offset:]
                             generate_heading(f"block length: {len(block)}")
-                            await self.write_block(piece_index,block_offset,block)
                             self.downloading=0
+                            await self.write_block(piece_index,block_offset,block)
                         elif msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
                     # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")

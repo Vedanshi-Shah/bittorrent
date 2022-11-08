@@ -14,6 +14,8 @@ import numpy as np
 from Block import Block
 import heapq
 import time
+import aiofiles
+
 class Tracker:
     def __init__(self,filename):
         self.filename='../torrent_files/'+filename
@@ -88,13 +90,13 @@ class Tracker:
             return True
         return False
     
-    async def verify_piece(self,piece_index):
+    def verify_piece(self,piece_index):
         my_piece = self.pieces[piece_index]
         data = b""
         for block in my_piece.values():
             data += block.data
-        hash = await hashlib.sha1(data)
-        hash = await hash.digest()
+        hash = hashlib.sha1(data)
+        hash = hash.digest()
         if (hash!=self.hashes[piece_index]):
             self.pieces[piece_index] = {}
             self.piece_status[piece_index] = 0
@@ -104,7 +106,7 @@ class Tracker:
     
     async def write_piece(self,piece_index,data):
         generate_heading("Piece verified and being written")
-        with open("temp.csv", "rb+") as f:
+        async with aiofiles.open("temp.csv", "rb+") as f:
             pos = piece_index * self.piece_length
             await f.seek(pos, 0)
             await f.write(data)
@@ -115,7 +117,7 @@ class Tracker:
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
 
         if (self.is_piece_complete(piece_index)):
-            is_verified,data = await self.verify_piece(piece_index)
+            is_verified,data = self.verify_piece(piece_index)
             if (is_verified):
                 # Need to await here
                 self.downloading_piece=None
