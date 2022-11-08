@@ -7,7 +7,7 @@ from prettify import generate_heading, keys_values
 import asyncio
 import numpy as np
 import time
-
+import os
 class Peer:
     def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index):
         self.ip=ip
@@ -25,6 +25,9 @@ class Peer:
         self.find_next_block = find_next_block
         self.write_block = write_block
         self.get_piece_index = get_piece_index
+        self.in_download_block = None
+        self.in_download_piece = None
+        self.in_download_length = None
         self.reader=None
         self.writer=None
 
@@ -50,6 +53,22 @@ class Peer:
         decoded_recv_data = struct.unpack("!b19sq20s20s", s[:68])
         if decoded_recv_data[3] != self.info_hash:
             raise Exception("Invalid Peer Connection")
+        s=b''
+        offset=0
+        try:
+            s+=await asyncio.wait_for(self.reader.read(65535),2)
+            # print(s)
+            if(len(s)>4):
+                msg_len=struct.unpack_from("!i",s)[0]
+                offset+=4
+                msg_id=struct.unpack_from("!B",s,offset)[0]
+                offset+=1
+                if(msg_id==5):
+                    bitfield=s[offset:]
+                    bitfield=bitstring.BitArray(bitfield).bin
+                    self.set_bitfield(bitfield)
+        except Exception as e:
+            print("Handshake ke baad bitfield nahi aya",e)
 
     async def connect(self):
         try:
@@ -61,7 +80,7 @@ class Peer:
             self.writer=None
             print(e)
 
-    async def send_request_message(self,piece_index,block_offset,block_length):
+    def send_request_message(self,piece_index,block_offset,block_length):
         # Index, Block Offset, Block length
         print(piece_index, block_offset, block_length)
         req_message=struct.pack("!IB",13,6)
@@ -71,22 +90,22 @@ class Peer:
         req_message += payload
         # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
         self.writer.write(req_message)
-        await self.writer.drain()
+        # self.writer.drain()
     
-    async def send_keep_alive(self):
+    def send_keep_alive(self):
         generate_heading("Sending Keep Alive")
         keep_alive_message = struct.pack("!I",0)
         self.writer.write(keep_alive_message)
-        await self.writer.drain()
+        # self.writer.drain()
     
     def update_bitfield(self, piece_index):
-        generate_heading(f"Updated {self.ip} | {self.port}: {bitstring}")
+        generate_heading(f"Updated {self.ip} | {self.port}")
         if (piece_index<self.no_pieces):
             self.present_bits[piece_index] = 1
     
     def set_bitfield(self, bitstring):
         generate_heading(f"Bitstring for {self.ip} | {self.port}: {bitstring}")
-        for i in range(len(bitstring)):
+        for i in range(len(bitstring)-1):
             if (bitstring[i]):
                 self.present_bits[i] = 1
             else:
@@ -118,21 +137,21 @@ class Peer:
                             generate_heading(f"Unchoked by {self.ip} | {self.port}")
                             self.peer_choking=0
                         elif msg_id==2:
-                            generate_heading("Interested")
+                            generate_heading(f"Interested {self.ip} | {self.port}")
                         elif msg_id==3:
-                            generate_heading("Not Interested")
+                            generate_heading(f"Not Interested {self.ip} | {self.port}")
                         elif msg_id==4:
-                            generate_heading("Have")
+                            generate_heading(f"Have {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             self.update_bitfield(piece_index)
                         elif msg_id==5:
-                            generate_heading("BitField")
+                            generate_heading(f"BitField {self.ip} | {self.port}")
                             bitfield=recv_data[offset:]
                             bitfield=bitstring.BitArray(bitfield).bin
                             self.set_bitfield(bitfield)
                             print(self.ip,'---------',self.port,"-------",self.present_bits)
                         elif msg_id==6:
-                            generate_heading("Request")
+                            generate_heading(f"Request {self.ip} | {self.port}")
                         elif msg_id==7:
                             generate_heading(f"Piece Received from {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
@@ -140,31 +159,46 @@ class Peer:
                             block_offset=struct.unpack_from("!i",recv_data,offset)[0]
                             offset+=4
                             block=recv_data[offset:]
-                            self.write_block(piece_index,block_offset,block,self.ip,self.port)
+                            self.write_block(piece_index,block_offset,block)
                             self.downloading=0
                         elif msg_id==8:
-                            generate_heading("Cancel")
+                            generate_heading(f"Cancel {self.ip} | {self.port}")
                         # generate_heading(f"Interested: {self.am_interested} | Choking: {self.peer_choking}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0):
-                            piece_no,piece_status = self.get_piece_index()
-
+                            piece_no,piece_status,exp = self.get_piece_index()
+                            print(f"Here 1 {piece_no}")
                             if piece_status==True:
                                 self.writer.close()
+                                generate_heading(f"meow meow meow {self.ip} | {self.port}")
                                 break
-                            print(self.present_bits,"=============",piece_no)
                             if self.present_bits[piece_no]==1:
+                                print(f"Here 2")
                                 self.downloading=1
-                                block_offset,block_length = self.find_next_block(piece_no)
-                                generate_heading(f"Requesting {piece_no}")
-                                await self.send_request_message(piece_no,block_offset,block_length)
+                                block_offset,block_length =self.find_next_block(piece_no,exp)
+                                print(f"Here 3 {piece_no} | {block_offset}")
+                                generate_heading(f"Requesting {piece_no} from {self.ip} | {self.port}")
+                                self.send_request_message(piece_no,block_offset,block_length)
+                                self.in_download_piece = piece_no
+                                self.in_download_block = block_offset
+                                self.in_download_length = block_length
                         current = round(time.time())
                         if (current>self.began_at + 120):
                             self.began_at = current
-                            await self.send_keep_alive()
+                            self.send_keep_alive()
                 
                 except Exception as e:
-                    pass
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print(exc_type, fname, exc_tb.tb_lineno)
+                    p,ps,_=self.get_piece_index()
+                    if(ps==True):
+                        print("Closing other peers as all pieces done")
+                        self.writer.close()
+                        break
+                    else:
+                        pass
         except Exception as e:
+            self.writer.close()
             print(e)
 
 
