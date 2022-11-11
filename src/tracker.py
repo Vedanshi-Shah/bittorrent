@@ -48,11 +48,11 @@ class Tracker:
             self.piece_status=[0]*self.no_pieces
             self.pieces = {}
             self.num_blocks = math.ceil(self.piece_length/BLOCK_LENGTH)
-            generate_heading(f"Num blocks: {self.num_blocks}")
+            # generate_heading(f"Num blocks: {self.num_blocks}")
             self.create_piece_dict()
             self.downloading_piece = None
             self.state=0 #0 for random first, 1 for rarest first & 2 for endgame
-            generate_heading(f"No. of Pieces: {self.no_pieces}")
+            # generate_heading(f"No. of Pieces: {self.no_pieces}")
             self.last_piece_length = self.file_length-(self.no_pieces-1)*self.piece_length
             self.num_blocks_last = math.ceil(self.last_piece_length/2**14)
             self.block_heap=[]
@@ -84,13 +84,13 @@ class Tracker:
         exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
         
         if(len(exp_blocks)>0):#check if any block has expired
-            generate_heading("Picking an expired block")
+            # generate_heading("Picking an expired block")
             i=np.random.randint(0,len(exp_blocks))
             exp_blocks[i].began_requesting=time.time()
             heapq.heapify(self.block_heap)
             return (exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
         else:
-            generate_heading(f"Piece and block number being requested by {ip} | {port}")
+            # generate_heading(f"Piece and block number being requested by {ip} | {port}")
             #search for next block
             if(self.downloading_piece==None):
                 #choose a piece and request the first block
@@ -172,19 +172,19 @@ class Tracker:
         if (hash!=self.hashes[piece_index]):
             self.pieces[piece_index] = {}
             self.piece_status[piece_index] = 0
-            generate_heading("Corrupted piece")
+            # generate_heading("Corrupted piece")
             return False,None
         return True,data
     
     async def write_piece(self,piece_index,data):
-        generate_heading("Piece verified and being written")
+        # generate_heading("Piece verified and being written")
         async with aiofiles.open(self.file_name, "rb+") as f:
             pos = piece_index * self.piece_length
             await f.seek(pos, 0)
             await f.write(data)
         # f.close()
     
-    def broadcast_have(self, piece_index):
+    async def broadcast_have(self, piece_index):
         generate_heading("Broadcasting have...")
         for peer in self.peers:
             peer.send_have(piece_index)
@@ -192,7 +192,7 @@ class Tracker:
     async def write_block(self,piece_index,block_offset,block_data):
         # if(self.pieces[piece_index][math.ceil(block_offset/2**14)].status==2):
         #     return
-        generate_heading(f"{piece_index} | {block_offset} |")
+        # generate_heading(f"{piece_index} | {block_offset} |")
         # self.pieces[piece_index][math.ceil(block_offset/2**14)]=Block(piece_index,math.ceil(block_offset/2**14),len(block_data))
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
@@ -203,14 +203,14 @@ class Tracker:
                 # Need to await here
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
-                await self.write_piece(piece_index,data)
-                self.broadcast_have(piece_index)
+                self.write_piece(piece_index,data)
+                await self.broadcast_have(piece_index)
                 # del self.pieces[piece_index]
                 generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
-        print("138: meow",len(self.block_heap))
+        # print("138: meow",len(self.block_heap))
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
-        print("139: meow",len(self.block_heap))
+        # print("139: meow",len(self.block_heap))
         heapq.heapify(self.block_heap)
         if(sum(self.piece_status)==4):
             self.state=1
@@ -225,7 +225,7 @@ class Tracker:
                 return (2**14*i,2**14)
         last_length = self.last_piece_length-(self.num_blocks_last-1)*(2**14)
         if(self.num_blocks_last-1 not in self.pieces[piece_index]):
-            generate_heading(f"Calling the last block for length of {last_length}")
+            # generate_heading(f"Calling the last block for length of {last_length}")
             return (2**14*(self.num_blocks_last-1),last_length)
         # else:
         #     generate_heading("2")
@@ -246,12 +246,12 @@ class Tracker:
         #     heapq.heapify(self.block_heap)
         #     return (a.offset,a.size)
         if (piece_index==self.no_pieces-1):
-            print("picking block of last piece")    
-            generate_heading("Looking at the last piece")
+            # print("picking block of last piece")    
+            # generate_heading("Looking at the last piece")
             return self.get_last_piece(piece_index)
 
         for i in range(self.num_blocks):
-            print("picking a block")
+            # print("picking a block")
 
             if (i not in self.pieces[piece_index]):
                 flag = True
@@ -260,7 +260,7 @@ class Tracker:
                 # self.pieces[piece_index][i]=a
                 return (2**14*i,2**14)
         if (not(flag)):
-            print("don't be here, fool!!!!!!!!!")
+            # print("don't be here, fool!!!!!!!!!")
             return (None,None)
     
     # def try_handshake(self,client,peer_index):
@@ -282,7 +282,7 @@ class Tracker:
         #fill 4 pieces at random first
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
-        print(len(self.peers))
+        # print(len(self.peers))
         asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin() for peer in self.peers]))
 
@@ -301,14 +301,14 @@ class Tracker:
         print("I shouldn't have been here")
         
     def get_piece_index(self):
-        print("Piece Status: ")
-        print(np.where(np.array(self.piece_status)==1)[0])
+        # print("Piece Status: ")
+        # print(np.where(np.array(self.piece_status)==1)[0])
         if (sum(self.piece_status)==self.no_pieces):
             generate_heading("All done")
             return (None, True,False)
         #check if any block has timedout
         if(len(self.block_heap) and self.block_heap[0].began_requesting+20<time.time()):
-            generate_heading(f"Re-Requesting {self.block_heap[0].piece} | {self.block_heap[0].offset} | heap_size: {len(self.block_heap)}")
+            # generate_heading(f"Re-Requesting {self.block_heap[0].piece} | {self.block_heap[0].offset} | heap_size: {len(self.block_heap)}")
             return (self.block_heap[0].piece,False,True)
         if(self.state==0):
             #random first
@@ -326,11 +326,11 @@ class Tracker:
                 return (self.downloading_piece, False,False)
         elif(self.state==1):
             #rarest first
-            print("Downloading:",self.downloading_piece)
-            generate_heading("In rarest first")
+            # print("Downloading:",self.downloading_piece)
+            # generate_heading("In rarest first")
             if(self.downloading_piece== None):
                 piece_index=self.get_rarest_piece()
-                generate_heading(f"Piece index: {piece_index}")
+                # generate_heading(f"Piece index: {piece_index}")
                 self.downloading_piece=piece_index
                 return (self.downloading_piece, False,False)
             else:
@@ -359,7 +359,7 @@ class Tracker:
                     # self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
                     piport.append((x[b'ip'].decode(),x[b'port']))
                     self.peer_dict[(x[b'ip'].decode(),x[b'port'])] = True
-                    print(x[b'ip'].decode(),x[b'port'])
+                    # print(x[b'ip'].decode(),x[b'port'])
         else:
             p=response_dict[b'peers']
             offset=0
@@ -372,7 +372,7 @@ class Tracker:
                 if((ip,port) not in piport):
                     # self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
                     self.peer_dict[(ip,port)] = True
-                    print(ip,port)
+                    # print(ip,port)
                     piport.append((ip,port))
     
     def udp_request(self,url,params):
@@ -427,7 +427,7 @@ class Tracker:
             # connection_id
             cid = struct.unpack_from("!q", raw_conn_data, 8)[0]
 
-            print(action, tid, cid)
+            # print(action, tid, cid)
 
         """
             Choose a random transaction ID.
@@ -457,7 +457,7 @@ class Tracker:
             return payload
 
         announce_payload = create_announce_payload(cid, action, transaction_id)
-        print(announce_payload)
+        # print(announce_payload)
         tracker_sock.sendto(announce_payload, (url, port))
 
         """
@@ -493,12 +493,12 @@ class Tracker:
                 peer_IP = ".".join(str(a) for a in raw_peer_IP)
                 # next 2 bytes is the peer port address
                 peer_port = int(struct.unpack_from("!H", raw_announce_data, offset + 4)[0])
-                print(peer_IP, peer_port)
+                # print(peer_IP, peer_port)
                 self.peer_dict[peer_IP, peer_port] = True
                 offset = offset + 6
 
-            print(interval, leechers, seeders)
-            print("Done parsing UDP")
+            # print(interval, leechers, seeders)
+            # print("Done parsing UDP")
         
     def is_http(self,url):
         if ('http' in url):
@@ -525,7 +525,7 @@ class Tracker:
         responses=[]
         loop=0
         while(len(responses)==0 and loop<1):
-            print(f"Looping {loop+1} time")
+            # print(f"Looping {loop+1} time")
             i=0
             while i<len(self.tracker_urls):
                 url=self.tracker_urls[i]
@@ -544,7 +544,7 @@ class Tracker:
             loop+=1
         
         for peer in self.peer_dict:
-            print(peer)
+            # print(peer)
             self.download_rates[(peer[0], peer[1])] = 0
             self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message))
     
@@ -556,16 +556,18 @@ class Tracker:
     async def top_four(self):
         while True:
             if (sum(self.piece_status)==self.no_pieces):
-                generate_heading("Completed. Exiting top four...")
+                # generate_heading("Completed. Exiting top four...")
                 sys.exit(0)
-            generate_heading("Finding top 4 peers...")
-            for peer in self.unchoked_peers:
-                print(peer.ip, peer.port)
-                peer.send_choke()
-            self.unchoked_peers = nlargest(4,self.peers,key=lambda peer: peer.download_rate)
-            for peer in self.unchoked_peers:
-                print(peer.ip, peer.port)
-                peer.send_unchoke()
+            # if (self.state==1):
+            if (sum(self.piece_status)>4):
+                # generate_heading("Finding top 4 peers...")
+                for peer in self.unchoked_peers:
+                    # print(peer.ip, peer.port)
+                    await peer.send_choke()
+                self.unchoked_peers = nlargest(4,self.peers,key=lambda peer: peer.download_rate)
+                for peer in self.unchoked_peers:
+                    # print(peer.ip, peer.port)
+                    await peer.send_unchoke()
             await asyncio.sleep(5)
     
     def update_rate(self,rate,ip,port):

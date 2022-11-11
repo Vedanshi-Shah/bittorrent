@@ -46,11 +46,11 @@ class Peer:
         return (curr_rate*(self.num_downloaded_blocks-1)+new_rate)/(self.num_downloaded_blocks)
 
     def get_download_rate(self,block_length):
-        print(block_length)
+        # print(block_length)
         rate = block_length/(time.time()-self.download_start)
-        print(rate)
+        # print(rate)
         self.download_rate = self.average_rate(self.download_rate,rate)
-        print(self.download_rate)
+        # print(self.download_rate)
         return self.download_rate
     
     async def send_interested(self):
@@ -64,7 +64,7 @@ class Peer:
         #     return {"status":0}
 
     async def send_handshake(self):
-        generate_heading(f"Sending Handshake to {self.ip} | {self.port}")
+        # generate_heading(f"Sending Handshake to {self.ip} | {self.port}")
         handshake_msg=struct.pack("!b19sq20s20s",19,"BitTorrent protocol".encode(),0,self.info_hash,self.id.encode())
         self.writer.write(handshake_msg)
         await self.writer.drain()
@@ -94,7 +94,7 @@ class Peer:
 
     async def connect(self):
         try:
-            print(self.ip, self.port)
+            # print(self.ip, self.port)
             self.reader,self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip,self.port),4)
             
         except Exception as e:
@@ -104,39 +104,40 @@ class Peer:
 
     def send_request_message(self,piece_index,block_offset,block_length):
         # Index, Block Offset, Block length
-        print(piece_index, block_offset, block_length)
+        # print(piece_index, block_offset, block_length)
         req_message=struct.pack("!IB",13,6)
         payload = struct.pack("!i", piece_index)
         payload += struct.pack("!i", block_offset)
         payload += struct.pack("!i", block_length)
         req_message += payload
-        print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
+        # print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
         self.last_requested=time.time()
         self.writer.write(req_message)
         # self.writer.drain()
     
-    def send_keep_alive(self):
+    async def send_keep_alive(self):
         generate_heading("Sending Keep Alive")
         keep_alive_message = struct.pack("!I",0)
         self.writer.write(keep_alive_message)
-        # self.writer.drain()
+        await self.writer.drain()
     
-    def send_choke(self):
+    async def send_choke(self):
         generate_heading("Sending choke")
         choke_message = struct.pack("!IB",1,0)
-        # self.writer.write(choke_message)
-        # await self.writer.drain()
+        self.writer.write(choke_message)
+        await self.writer.drain()
     
-    def send_unchoke(self):
+    async def send_unchoke(self):
         generate_heading("Sending unchoke")
         unchoke_message = struct.pack("!IB",1,1)
-        # self.writer.write(unchoke_message)
-        # await self.writer.drain()
+        self.writer.write(unchoke_message)
+        await self.writer.drain()
     
     def send_have(self,piece_index):
         generate_heading("Sending have")
         have_message = struct.pack("!IB",5,4)
         have_message += struct.pack("!I",piece_index)
+        self.writer.write(have_message)
     
     def send_bitfield(self):
         generate_heading("Sending bitfield")
@@ -178,32 +179,32 @@ class Peer:
                         if msg_id==0:
                             generate_heading(f"Choked by {self.ip} | {self.port}")
                             self.peer_choking=1
-                        elif msg_id==1:
+                        if msg_id==1:
                             generate_heading(f"Unchoked by {self.ip} | {self.port}")
                             self.peer_choking=0
-                        elif msg_id==2:
+                        if msg_id==2:
                             generate_heading(f"Interested {self.ip} | {self.port}")
-                        elif msg_id==3:
+                        if msg_id==3:
                             generate_heading(f"Not Interested {self.ip} | {self.port}")
-                        elif msg_id==4:
+                        if msg_id==4:
                             generate_heading(f"Have {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             self.update_bitfield(piece_index)
-                        elif msg_id==5:
+                        if msg_id==5:
                             generate_heading(f"BitField {self.ip} | {self.port}")
                             bitfield=recv_data[offset:]
                             bitfield=bitstring.BitArray(bitfield).bin
                             self.set_bitfield(bitfield)
-                            print(self.ip,'---------',self.port,"-------",self.present_bits)
-                        elif msg_id==6:
+                            # print(self.ip,'---------',self.port,"-------",self.present_bits)
+                        if msg_id==6:
                             generate_heading(f"Request {self.ip} | {self.port}")
-                        elif msg_id==7:
+                        if msg_id==7:
                             s=recv_data[5:]
                             while(len(s)<msg_len-1):
                                 s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
-                            generate_heading(f"Piece Received from {self.ip} | {self.port}")
+                            # generate_heading(f"Piece Received from {self.ip} | {self.port}")
                             self.num_downloaded_blocks += 1
-                            generate_heading(f"Piece Received from {self.ip} | {self.port} | {self.download_start} | {time.time()} | {self.num_downloaded_blocks} | {msg_len-9}")
+                            # generate_heading(f"Piece Received from {self.ip} | {self.port} | {self.download_start} | {time.time()} | {self.num_downloaded_blocks} | {msg_len-9}")
                             self.get_download_rate(msg_len-9)
                             self.update_rate(self.download_rate,self.ip,self.port)
                             offset=0
@@ -212,11 +213,11 @@ class Peer:
                             block_offset=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
                             block=s[offset:]
-                            generate_heading(f"block length: {len(block)}")
+                            # generate_heading(f"block length: {len(block)}")
                             self.downloading=0
                             await self.write_block(piece_index,block_offset,block)
-                            await asyncio.sleep(2)
-                        elif msg_id==8:
+                            # await asyncio.sleep(1)
+                        if msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
                     # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0 and np.sum(self.present_bits)>0):
@@ -226,10 +227,10 @@ class Peer:
                                 # await self.writer.wait_closed()
                                 break
                             if(piece_no==None):
-                                print("yay")
+                                # print("yay")
                                 pass
                             else:
-                                generate_heading(f"Requesting {piece_no} | {block_offset} | {block_size} | using {self.ip} | {self.port}")
+                                # generate_heading(f"Requesting {piece_no} | {block_offset} | {block_size} | using {self.ip} | {self.port}")
                                 if(self.present_bits[piece_no]==1):
                                     self.downloading=1
                                     self.send_request_message(piece_no,block_offset,block_size)
