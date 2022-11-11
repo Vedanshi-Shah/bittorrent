@@ -133,11 +133,12 @@ class Peer:
         self.writer.write(unchoke_message)
         await self.writer.drain()
     
-    def send_have(self,piece_index):
+    async def send_have(self,piece_index):
         generate_heading("Sending have")
         have_message = struct.pack("!IB",5,4)
         have_message += struct.pack("!I",piece_index)
         self.writer.write(have_message)
+        await self.writer.drain()
     
     def send_bitfield(self):
         generate_heading("Sending bitfield")

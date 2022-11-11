@@ -64,6 +64,7 @@ class Tracker:
             self.unchoked_peers = []
             self.download_rates = {}
             self.upload_rates = {}
+            self.num_downloaded_blocks=0
     
     def create_file(self):
         print(self.file_name)
@@ -73,12 +74,14 @@ class Tracker:
     def allDownloaded(self):
         # print(self.piece_status)
         if(sum(self.piece_status)==self.no_pieces):
+            self.top_four_task.cancel()
             return True
         return False
 
     def get_piece_block(self,ip,port):
         # check if all pieces have been receive
         if(sum(self.piece_status)==self.no_pieces):
+            self.top_four_task.cancel()
             return (None,None,None,True)
         
         exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
@@ -184,7 +187,7 @@ class Tracker:
             await f.write(data)
         # f.close()
     
-    async def broadcast_have(self, piece_index):
+    def broadcast_have(self, piece_index):
         generate_heading("Broadcasting have...")
         for peer in self.peers:
             peer.send_have(piece_index)
@@ -196,15 +199,20 @@ class Tracker:
         # self.pieces[piece_index][math.ceil(block_offset/2**14)]=Block(piece_index,math.ceil(block_offset/2**14),len(block_data))
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
-
+        self.num_downloaded_blocks+=1
+        self.download_progress()
+        # try:
+        #     await self.download_progress()
+        # except Exception as e:
+        #     print("error while printing download progress:",e)
         if (self.is_piece_complete(piece_index)):
             is_verified,data = self.verify_piece(piece_index)
             if (is_verified):
                 # Need to await here
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
-                self.write_piece(piece_index,data)
-                await self.broadcast_have(piece_index)
+                await self.write_piece(piece_index,data)
+                self.broadcast_have(piece_index)
                 # del self.pieces[piece_index]
                 generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
@@ -214,6 +222,13 @@ class Tracker:
         heapq.heapify(self.block_heap)
         if(sum(self.piece_status)==4):
             self.state=1
+    
+    def download_progress(self):
+        percent=(self.num_downloaded_blocks/((self.no_pieces-1)*self.num_blocks+self.num_blocks_last))*100
+        print(percent)
+        arr=["#"]*math.ceil(percent)+[" "]*(100-math.ceil(percent))
+        # os.system('clear')
+        generate_heading(''.join(arr))
     
     def get_last_piece(self,piece_index):
         i = 0
@@ -283,7 +298,7 @@ class Tracker:
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
         # print(len(self.peers))
-        asyncio.create_task(self.top_four())
+        self.top_four_task=asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin() for peer in self.peers]))
 
     def get_rarest_piece(self):
@@ -338,6 +353,7 @@ class Tracker:
     
     def complete(self):
         data = b""
+        self.top_four_task.cancel()
         # generate_heading("Here")
         # for piece in self.pieces:
         #     # print(piece)
@@ -348,6 +364,7 @@ class Tracker:
         #     print(data)
         #     print()
         print()
+        # sys.exit(0)
 
     def http_request(self,url,params):
         params["compact"] = 1
@@ -557,10 +574,11 @@ class Tracker:
         while True:
             if (sum(self.piece_status)==self.no_pieces):
                 # generate_heading("Completed. Exiting top four...")
+                # add pure seeding
                 sys.exit(0)
             # if (self.state==1):
             if (sum(self.piece_status)>4):
-                # generate_heading("Finding top 4 peers...")
+                generate_heading("Finding top 4 peers...")
                 for peer in self.unchoked_peers:
                     # print(peer.ip, peer.port)
                     await peer.send_choke()
