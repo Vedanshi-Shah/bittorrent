@@ -8,8 +8,9 @@ import asyncio
 import numpy as np
 import time
 import os
+
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,complete):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,complete,get_piece_block,allDownloaded):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -32,6 +33,9 @@ class Peer:
         self.writer=None
         self.rerequest_piece=rerequest_piece
         self.complete = complete
+        self.last_requested=0
+        self.get_piece_block=get_piece_block
+        self.allDownloaded=allDownloaded
 
     
     async def send_interested(self):
@@ -51,8 +55,8 @@ class Peer:
         await self.writer.drain()
         s=b''
         # Can receive a BitField after handshake
-        while len(s)<68:
-            s+=await asyncio.wait_for(self.reader.read(65535),10) # wait for 10 seconds to receive data
+        # while len(s)<68:
+        s+=await asyncio.wait_for(self.reader.read(65535),10)
         decoded_recv_data = struct.unpack("!b19sq20s20s", s[:68])
         if decoded_recv_data[3] != self.info_hash:
             raise Exception("Invalid Peer Connection")
@@ -92,6 +96,7 @@ class Peer:
         payload += struct.pack("!i", block_length)
         req_message += payload
         print(f"Requesting (piece_index = {piece_index}, block_offset = {block_offset}, block_length = {block_length})...")
+        self.last_requested=time.time()
         self.writer.write(req_message)
         # self.writer.drain()
     
@@ -108,7 +113,7 @@ class Peer:
     
     def set_bitfield(self, bitstring):
         generate_heading(f"Bitstring for {self.ip} | {self.port}: {bitstring}")
-        for i in range(len(bitstring)-1):
+        for i in range(self.no_pieces):
             if (bitstring[i]):
                 self.present_bits[i] = 1
             else:
@@ -168,46 +173,65 @@ class Peer:
                             generate_heading(f"block length: {len(block)}")
                             self.downloading=0
                             await self.write_block(piece_index,block_offset,block)
+                            await asyncio.sleep(2)
                         elif msg_id==8:
                             generate_heading(f"Cancel {self.ip} | {self.port}")
                     # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
-                        if (self.am_interested and self.peer_choking==0 and self.downloading==0):
-                            piece_no,piece_status,exp = self.get_piece_index()
-                            print(piece_no,piece_status,exp)
-                            print(f"Here 1 {piece_no}")
-                            if piece_status==True:
+                        if (self.am_interested and self.peer_choking==0 and self.downloading==0 and np.sum(self.present_bits)>0):
+                            piece_no, block_offset, block_size, piece_status=self.get_piece_block(self.ip,self.port)
+                            if(piece_status==True):
                                 self.writer.close()
-                                self.complete()
+                                # await self.writer.wait_closed()
                                 break
-                            if self.present_bits[piece_no]==1:
-                                print(f"Here 2")
-                                self.downloading=1
-                                block_offset,block_length =self.find_next_block(piece_no,exp)
-                                print(f"Here 3 {piece_no} | {block_offset}")
-                                generate_heading(f"Requesting {piece_no} from {self.ip} | {self.port}")
-                                self.send_request_message(piece_no,block_offset,block_length)
-                                self.in_download_piece = piece_no
-                                self.in_download_block = block_offset
-                                self.in_download_length = block_length
+                            if(piece_no==None):
+                                print("yay")
+                                pass
+                            else:
+                                generate_heading(f"Requesting {piece_no} | {block_offset} | {block_size} | using {self.ip} | {self.port}")
+                                if(self.present_bits[piece_no]==1):
+                                    self.downloading=1
+                                    self.send_request_message(piece_no,block_offset,block_size)
+                            
+                            # piece_no,piece_status,exp = self.get_piece_index()
+                            # print(piece_no,piece_status,exp)
+                            # print(f"Here 1 {piece_no}")
+                            # if piece_status==True:
+                            #     self.writer.close()
+                            #     # self.complete()
+                            #     break
+                            # if self.present_bits[piece_no]==1:
+                            #     print(f"Here 2")
+                            #     self.downloading=1
+                            #     block_offset,block_length =self.find_next_block(piece_no,exp)
+                            #     print(f"Here 3 {piece_no} | {block_offset}")
+                            #     generate_heading(f"Requesting {piece_no} from {self.ip} | {self.port}")
+                            #     self.send_request_message(piece_no,block_offset,block_length)
+                            #     self.in_download_piece = piece_no
+                            #     self.in_download_block = block_offset
+                            #     self.in_download_length = block_length
                         current = round(time.time())
                         if (current>self.began_at + 120):
                             self.began_at = current
                             self.send_keep_alive()
                 
+                except ConnectionResetError:
+                    print("Connection reset error")
+                    self.writer.close()
+                    # await self.writer.wait_closed()
+                    break
                 except Exception as e:
-                    # self.downloading=0
-                    p,ps,_=self.get_piece_index()
-                    if(ps==True):
+                    # exc_type, exc_obj, exc_tb = sys.exc_info()
+                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    # print(exc_type, fname, exc_tb.tb_lineno)
+                    # print(self.downloading,e)
+                    if(self.allDownloaded()):
                         self.writer.close()
+                        # await self.writer.wait_closed()
                         break
-                    if(self.downloading==0):
-                        pass
                     else:
-                        (pno,bo,bl,st)=self.rerequest_piece()
-                        if(st==True):
-                            pass
-                        else:
-                            self.send_request_message(pno,bo,bl)
+                        pass
+
+
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
                     # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     # print(exc_type, fname, exc_tb.tb_lineno)
@@ -220,7 +244,6 @@ class Peer:
                     # pass
         except Exception as e:
             self.writer.close()
-            print(e)
 
 
     # def read_and_write_messages(self,client):
