@@ -10,7 +10,7 @@ import time
 import os
 
 class Peer:
-    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,complete,get_piece_block,allDownloaded):
+    def __init__(self,peer_id,info_hash,ip,port,no_pieces,find_next_block,write_block,get_piece_index,rerequest_piece,complete,get_piece_block,allDownloaded,update_rate,create_message):
         self.ip=ip
         self.port=port
         self.am_choking=1
@@ -36,7 +36,22 @@ class Peer:
         self.last_requested=0
         self.get_piece_block=get_piece_block
         self.allDownloaded=allDownloaded
+        self.download_rate = 0
+        self.update_rate = update_rate
+        self.num_downloaded_blocks = 0
+        self.download_start = 0
+        self.create_message = create_message
+    
+    def average_rate(self,curr_rate,new_rate):
+        return (curr_rate*(self.num_downloaded_blocks-1)+new_rate)/(self.num_downloaded_blocks)
 
+    def get_download_rate(self,block_length):
+        print(block_length)
+        rate = block_length/(time.time()-self.download_start)
+        print(rate)
+        self.download_rate = self.average_rate(self.download_rate,rate)
+        print(self.download_rate)
+        return self.download_rate
     
     async def send_interested(self):
         # try:
@@ -106,6 +121,29 @@ class Peer:
         self.writer.write(keep_alive_message)
         # self.writer.drain()
     
+    def send_choke(self):
+        generate_heading("Sending choke")
+        choke_message = struct.pack("!IB",1,0)
+        # self.writer.write(choke_message)
+        # await self.writer.drain()
+    
+    def send_unchoke(self):
+        generate_heading("Sending unchoke")
+        unchoke_message = struct.pack("!IB",1,1)
+        # self.writer.write(unchoke_message)
+        # await self.writer.drain()
+    
+    def send_have(self,piece_index):
+        generate_heading("Sending have")
+        have_message = struct.pack("!IB",5,4)
+        have_message += struct.pack("!I",piece_index)
+    
+    def send_bitfield(self):
+        generate_heading("Sending bitfield")
+        length,bitfield = self.create_message()
+        bitfield_message = struct.pack("!IB",length,5)
+        bitfield_message += struct.pack(f"!{length-1}s", bitfield)
+    
     def update_bitfield(self, piece_index):
         generate_heading(f"Updated {self.ip} | {self.port}")
         if (piece_index<self.no_pieces):
@@ -164,6 +202,10 @@ class Peer:
                             while(len(s)<msg_len-1):
                                 s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
                             generate_heading(f"Piece Received from {self.ip} | {self.port}")
+                            self.num_downloaded_blocks += 1
+                            generate_heading(f"Piece Received from {self.ip} | {self.port} | {self.download_start} | {time.time()} | {self.num_downloaded_blocks} | {msg_len-9}")
+                            self.get_download_rate(msg_len-9)
+                            self.update_rate(self.download_rate,self.ip,self.port)
                             offset=0
                             piece_index=struct.unpack_from("!i",s,offset)[0]
                             offset+=4
@@ -191,6 +233,8 @@ class Peer:
                                 if(self.present_bits[piece_no]==1):
                                     self.downloading=1
                                     self.send_request_message(piece_no,block_offset,block_size)
+                                    self.download_start = time.time()
+
                             
                             # piece_no,piece_status,exp = self.get_piece_index()
                             # print(piece_no,piece_status,exp)

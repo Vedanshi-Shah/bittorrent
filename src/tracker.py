@@ -16,6 +16,7 @@ import heapq
 import time
 import aiofiles
 import numpy as np
+from heapq import nlargest
 import os
 
 piport = []
@@ -60,6 +61,9 @@ class Tracker:
             print("Blocks in last piece:",self.num_blocks_last)
             # self.print_hashes()
             self.create_file()
+            self.unchoked_peers = []
+            self.download_rates = {}
+            self.upload_rates = {}
     
     def create_file(self):
         print(self.file_name)
@@ -180,6 +184,11 @@ class Tracker:
             await f.write(data)
         # f.close()
     
+    def broadcast_have(self, piece_index):
+        generate_heading("Broadcasting have...")
+        for peer in self.peers:
+            peer.send_have(piece_index)
+    
     async def write_block(self,piece_index,block_offset,block_data):
         # if(self.pieces[piece_index][math.ceil(block_offset/2**14)].status==2):
         #     return
@@ -195,6 +204,7 @@ class Tracker:
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
                 await self.write_piece(piece_index,data)
+                self.broadcast_have(piece_index)
                 # del self.pieces[piece_index]
                 generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
@@ -273,6 +283,7 @@ class Tracker:
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
         print(len(self.peers))
+        asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin() for peer in self.peers]))
 
     def get_rarest_piece(self):
@@ -327,14 +338,42 @@ class Tracker:
     
     def complete(self):
         data = b""
-        generate_heading("Here")
-        for piece in self.pieces:
-            # print(piece)
-            generate_heading(f"Piece index: {piece}")
-            for block in self.pieces[piece].values():
-                data += block.data
-        print(data)
+        # generate_heading("Here")
+        # for piece in self.pieces:
+        #     # print(piece)
+        #     generate_heading(f"Piece index: {piece}")
+        #     data = b""
+        #     for block in self.pieces[piece].values():
+        #         data += block.data
+        #     print(data)
+        #     print()
         print()
+
+    def http_request(self,url,params):
+        params["compact"] = 1
+        announce_response = requests.get(url,params).content
+        response_dict = bencodepy.decode(announce_response)
+        if(type(response_dict[b'peers'])==list):
+            for x in response_dict[b'peers']:
+                if((x[b'ip'].decode(),x[b'port']) not in piport):
+                    # self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
+                    piport.append((x[b'ip'].decode(),x[b'port']))
+                    self.peer_dict[(x[b'ip'].decode(),x[b'port'])] = True
+                    print(x[b'ip'].decode(),x[b'port'])
+        else:
+            p=response_dict[b'peers']
+            offset=0
+            while offset<len(p):
+                ip_number = struct.unpack_from("!I", p, offset)[0]
+                ip = inet_ntoa(struct.pack("!I", ip_number))
+                offset += 4
+                port = struct.unpack_from("!H", p, offset)[0]
+                offset += 2
+                if((ip,port) not in piport):
+                    # self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
+                    self.peer_dict[(ip,port)] = True
+                    print(ip,port)
+                    piport.append((ip,port))
     
     def udp_request(self,url,params):
         def connection_upload_udp(connection_id, action, transaction_id):
@@ -460,32 +499,12 @@ class Tracker:
 
             print(interval, leechers, seeders)
             print("Done parsing UDP")
-
-    def http_request(self,url,params):
-        params["compact"] = 1
-        announce_response = requests.get(url,params).content
-        response_dict = bencodepy.decode(announce_response)
-        if(type(response_dict[b'peers'])==list):
-            for x in response_dict[b'peers']:
-                if((x[b'ip'].decode(),x[b'port']) not in piport):
-                    # self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
-                    piport.append((x[b'ip'].decode(),x[b'port']))
-                    self.peer_dict[(x[b'ip'].decode(),x[b'port'])] = True
-                    print(x[b'ip'].decode(),x[b'port'])
+        
+    def is_http(self,url):
+        if ('http' in url):
+            return True
         else:
-            p=response_dict[b'peers']
-            offset=0
-            while offset<len(p):
-                ip_number = struct.unpack_from("!I", p, offset)[0]
-                ip = inet_ntoa(struct.pack("!I", ip_number))
-                offset += 4
-                port = struct.unpack_from("!H", p, offset)[0]
-                offset += 2
-                if((ip,port) not in piport):
-                    # self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
-                    self.peer_dict[(ip,port)] = True
-                    print(ip,port)
-                    piport.append((ip,port))
+            return False
 
     def get_peers(self):
         self.peers=[]
@@ -511,22 +530,47 @@ class Tracker:
             while i<len(self.tracker_urls):
                 url=self.tracker_urls[i]
                 try:
-                    if ('http' in url):
+                    if self.is_http(url):
                         generate_heading("HTTP")
                         print(url)
                         self.http_request(url,params)
-                    elif('udp' in url):
-                        pass
-                        # generate_heading("UDP")
-                        # print(url)
-                        # self.udp_request(url,params)
                     else:
-                        pass
+                        generate_heading("UDP")
+                        print(url)
+                        # self.udp_request(url,params)
                 except Exception as e:
                     print(e)
                 i+=1
             loop+=1
-        print("No. of peers:",len(self.peer_dict))
+        
         for peer in self.peer_dict:
             print(peer)
-            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded))
+            self.download_rates[(peer[0], peer[1])] = 0
+            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message))
+    
+    def create_message(self):
+        bitstring = "".join(self.piece_status)
+        bitstring = bitstring.encode()
+        return 1+len(self.piece_status),bitstring
+    
+    async def top_four(self):
+        while True:
+            if (sum(self.piece_status)==self.no_pieces):
+                generate_heading("Completed. Exiting top four...")
+                sys.exit(0)
+            generate_heading("Finding top 4 peers...")
+            for peer in self.unchoked_peers:
+                print(peer.ip, peer.port)
+                peer.send_choke()
+            self.unchoked_peers = nlargest(4,self.peers,key=lambda peer: peer.download_rate)
+            for peer in self.unchoked_peers:
+                print(peer.ip, peer.port)
+                peer.send_unchoke()
+            await asyncio.sleep(5)
+    
+    def update_rate(self,rate,ip,port):
+        generate_heading(f"Rate of {ip} {port} updated from {self.download_rates[(ip, port)]} to {rate}")
+        self.download_rates[(ip,port)] = rate
+        generate_heading("Upload rate")
+        for addr,rate in self.download_rates.items():
+            print(addr[0],addr[1],rate)
