@@ -91,7 +91,8 @@ class Tracker:
     def create_file(self):
         if(self.mode==1):
             #multi files
-            os.mkdir(self.fileordir_name)
+            if not os.path.exists(self.fileordir_name):
+                os.mkdir(self.fileordir_name)
             for fn in self.multi_files:
                 # print(fn[0])
                 with open(self.fileordir_name+"/"+fn[0],"w") as f:
@@ -227,13 +228,13 @@ class Tracker:
                 start_pos=0
 
         else:
-            async with aiofiles.open(self.file_name, "rb+") as f:
+            async with aiofiles.open(self.fileordir_name, "rb+") as f:
                 pos = piece_index * self.piece_length
                 await f.seek(pos, 0)
                 await f.write(data)
         # f.close()
     
-    async def broadcast_have(self, piece_index):
+    def broadcast_have(self, piece_index):
         # generate_heading("Broadcasting have...")
         for peer in self.peers:
             await peer.send_have(piece_index)
@@ -362,10 +363,9 @@ class Tracker:
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
         # print(len(self.peers))
-        self.top_four_task=asyncio.create_task(self.top_four())
-        
         self.piece_queue = list(np.random.randint(self.no_pieces,size=5))
         self.to_be_downloaded = list(set(self.to_be_downloaded)-set(self.piece_queue))
+        self.top_four_task=asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin(math.ceil((self.no_pieces-1)*self.num_blocks+self.num_blocks_last)/len(self.peers)) for peer in self.peers]))
 
     def get_rarest_piece(self):
@@ -616,12 +616,13 @@ class Tracker:
                 try:
                     if self.is_http(url):
                         # generate_heading("HTTP")
-                        print(url)
+                        # print(url)
                         self.http_request(url,params)
                     else:
-                        generate_heading("UDP")
-                        print(url)
-                        self.udp_request(url,params)
+                        # generate_heading("UDP")
+                        # print(url)
+                        pass
+                        # self.udp_request(url,params)
                 except Exception as e:
                     print("559:",e)
                 i+=1

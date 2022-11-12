@@ -174,7 +174,7 @@ class Peer:
 
             while True:
                 try:
-                    print(f"176: Here1 {self.ip} | {self.port}")
+                    # print(f"176: Here1 {self.ip} | {self.port}")
                     recv_data=await asyncio.wait_for(self.reader.read(65535),5)
                     if len(recv_data)>4:
                         offset=0
@@ -189,11 +189,10 @@ class Peer:
                             generate_heading(f"Unchoked by {self.ip} | {self.port}")
                             self.peer_choking=0
                         if msg_id==2:
-                            # generate_heading(f"Interested {self.ip} | {self.port}")
-                            pass
+                            generate_heading(f"Interested {self.ip} | {self.port}")
                             pass
                         if msg_id==3:
-                            # generate_heading(f"Not Interested {self.ip} | {self.port}")
+                            generate_heading(f"Not Interested {self.ip} | {self.port}")
                             pass
                         if msg_id==4:
                             # generate_heading(f"Have {self.ip} | {self.port}")
@@ -206,12 +205,12 @@ class Peer:
                             self.set_bitfield(bitfield)
                             # print(self.ip,'---------',self.port,"-------",self.present_bits)
                         if msg_id==6:
-                            # generate_heading(f"Request {self.ip} | {self.port}")
+                            generate_heading(f"Request {self.ip} | {self.port}")
                             pass
                         if msg_id==7:
                             s=recv_data[5:]
                             while(len(s)<msg_len-1):
-                                print(f"213 Here2 {self.ip} | {self.port}")
+                                # print(f"213 Here2 {self.ip} | {self.port}")
                                 s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
                             generate_heading(f"Piece Received from {self.ip} | {self.port}")
                             self.num_downloaded_blocks += 1
@@ -237,7 +236,7 @@ class Peer:
                         if (self.am_interested and self.peer_choking==0 and self.downloading==0 and np.sum(self.present_bits)>0):
                             piece_no, block_offset, block_size, piece_status=self.get_piece_block(self.ip,self.port)
                             if(piece_status==True):
-                                print("240")
+                                # print("240")
                                 self.writer.close()
                                 # await self.writer.wait_closed()
                                 break
@@ -287,7 +286,7 @@ class Peer:
                     # print(exc_type, fname, exc_tb.tb_lineno)
                     # print(self.downloading,e)
                     if(self.allDownloaded()):
-                        print("291")
+                        # print("291")
                         self.writer.close()
                         # await self.writer.wait_closed()
                         break
