@@ -139,6 +139,21 @@ class Tracker:
                     # if(p.downloading==0):
                     p.downloading=1
                     await p.send_request_message(self.piece_queue[0],bo,bl)
+    
+    async def send_block(self,piece_index,block_offset,block_length,writer):
+        if self.mode==1:
+            writer.write(self.pieces[piece_index][block_offset])
+            await writer.drain()
+        else:
+            # Open the file
+            pos = piece_index * self.piece_length
+            async with aiofiles.open(self.filename, "rb+") as f:
+                await f.seek(pos,0)
+                data = await f.read(block_length)
+                writer.write(data)
+                await writer.drain()
+            # Find the offset
+            # Read
 
     async def get_piece_block(self,ip,port):
         # check if all pieces have been receive
@@ -601,7 +616,7 @@ class Tracker:
             raw_conn_data, conn = tracker_sock.recvfrom(2048)
         except Exception as e:
             print(e)
-            return
+            # return
         if (len(raw_conn_data) < 16):
             raise NotImplementedError()
         else:
@@ -610,12 +625,12 @@ class Tracker:
             exp = action==0x0
             if (action!=0x0):
                 print("error connecting")
-                return
+                # return
             # transaction_id
             tid = struct.unpack_from("!i", raw_conn_data, 4)[0]
             if (tid!=transaction_id):
                 print("error connecting")
-                return
+                # return
             # connection_id
             cid = struct.unpack_from("!q", raw_conn_data, 8)[0]
 
@@ -668,12 +683,12 @@ class Tracker:
             action = struct.unpack_from("!i", raw_announce_data, 0)[0]
             if (action!=0x1):
                 print("error connecting")
-                return
+                # return
             # transaction_id
             tid = struct.unpack_from("!i", raw_announce_data, 4)[0]
             if (tid!=transaction_id):
                 print("error connecting")
-                return
+                # return
             # interval
             interval = struct.unpack_from("!i", raw_announce_data, 8)[0]
             leechers = struct.unpack_from("!i", raw_announce_data, 12)[0]
@@ -723,8 +738,8 @@ class Tracker:
                         print(url)
                         self.http_request(url,params)
                     else:
-                        # self.udp_request(url,params)
-                        pass
+                        self.udp_request(url,params)
+                        # pass
                 except Exception as e:
                     print("error")
                 i+=1
@@ -732,7 +747,7 @@ class Tracker:
         self.lastCallTracker = time.time()
         for peer in self.peer_dict:
             self.download_rates[(peer[0], peer[1])] = 0
-            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message,self.sayEndgame))
+            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message,self.sayEndgame,self.send_block))
         generate_heading(f"No. of peers: {len(self.peers)}")
     
     def create_message(self):
