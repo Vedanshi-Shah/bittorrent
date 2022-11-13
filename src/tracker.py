@@ -114,7 +114,7 @@ class Tracker:
     def allDownloaded(self):
         # print(self.piece_status)
         if(sum(self.piece_status)==self.no_pieces):
-            self.top_four_task.cancel()
+            # self.top_four_task.cancel()
             return True
         return False
     
@@ -142,8 +142,8 @@ class Tracker:
 
     async def get_piece_block(self,ip,port):
         # check if all pieces have been receive
-        if(sum(self.piece_status)==self.no_pieces):
-            self.top_four_task.cancel()
+        if(sum(self.piece_status)>=self.no_pieces):
+            # self.top_four_task.cancel()
             return (None,None,None,True)
         if(self.num_blocks*(self.no_pieces-1)+self.num_blocks_last-self.num_downloaded_blocks<ENDGAME):
             #call endgame function
@@ -241,7 +241,6 @@ class Tracker:
             
             while(low<=high):
                 mid=(high+low)//2
-                print(mid)
                 if(self.cumulative_len[mid]==ele):
                     return mid
                 elif(self.cumulative_len[mid]>ele):
@@ -285,6 +284,9 @@ class Tracker:
         #     return
         # generate_heading(f"{piece_index} | {block_offset} |")
         # self.pieces[piece_index][math.ceil(block_offset/2**14)]=Block(piece_index,math.ceil(block_offset/2**14),len(block_data))
+        if (self.piece_status[piece_index]==1):
+            return
+        # If all blocks have been received - the piece is yet to be verified
         if(self.pieces[piece_index][math.ceil(block_offset/2**14)].data==b''):
             self.num_downloaded_blocks+=1
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
@@ -327,9 +329,9 @@ class Tracker:
                     self.piece_queue.append(k)
                     self.to_be_downloaded.remove(k)
                 await self.write_piece(piece_index,data)
-                self.broadcast_have(piece_index)
+                await self.broadcast_have(piece_index)
             else:
-                generate_heading(f"Corrupted Block {piece_index}")
+                generate_heading(f"Corrupted Piece {piece_index}")
                 self.num_downloaded_blocks-=len(self.pieces[piece_index])
                 self.pieces[piece_index] = {}
                 # if(sum(self.piece_status)<self.no_pieces):
@@ -429,6 +431,7 @@ class Tracker:
         self.to_be_downloaded = list(set(self.to_be_downloaded)-set(self.piece_queue))
         self.top_four_task=asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin(math.ceil((self.no_pieces-1)*self.num_blocks+self.num_blocks_last)/len(self.peers)) for peer in self.peers]))
+        await asyncio.gather(*([peer.pure_seeding() for peer in self.peers if peer.reader!=None and peer.writer!=None]))
 
     def get_rarest_piece(self):
         piece_available_freq=np.array([0]*self.no_pieces)
@@ -447,7 +450,7 @@ class Tracker:
     def get_piece_index(self):
         # print("Piece Status: ")
         # print(np.where(np.array(self.piece_status)==1)[0])
-        if (sum(self.piece_status)==self.no_pieces):
+        if (sum(self.piece_status)>=self.no_pieces):
             # generate_heading("All done")
             return (None, True,False)
         #check if any block has timedout
@@ -482,7 +485,9 @@ class Tracker:
     
     def complete(self):
         data = b""
-        self.top_four_task.cancel()
+        generate_heading("Complete called...")
+        # self.top_four_task.cancel()
+        # self.top_four_task = asyncio.create_task()
         # generate_heading("Here")
         # for piece in self.pieces:
         #     # print(piece)
@@ -494,6 +499,19 @@ class Tracker:
         #     print()
         # print()
         # sys.exit(0)
+    
+    async def update_peers(self):
+        while True:
+            self.peers=[p for p in self.peers if p.writer!=None and p.reader!=None]
+            generate_heading("Updating trackers...")
+            await asyncio.sleep(30)
+    
+    async def rerequest_trackers(self):
+        while True:
+            if(self.lastCallTracker+self.maxInterval<time.time()):
+                generate_heading("Rerequesting trackers...")
+                self.get_peers()
+            await asyncio.sleep(30)
 
     def http_request(self,url,params):
         params["compact"] = 1
@@ -521,6 +539,31 @@ class Tracker:
                     self.peer_dict[(ip,port)] = True
                     # print(ip,port)
                     piport.append((ip,port))
+
+    # def http_request(self,url,params):
+    #     params["compact"] = 1
+    #     announce_response = requests.get(url,params).content
+    #     response_dict = bencodepy.decode(announce_response)
+    #     self.maxInterval=max(self.maxInterval,response_dict[b'interval'])
+    #     if(type(response_dict[b'peers'])==list):
+    #         for x in response_dict[b'peers']:
+    #             if((x[b'ip'].decode(),x[b'port']) not in piport):
+    #                 # self.peers.append(Peer(self.peer_id,self.info_hash,x[b'ip'].decode(),x[b'port'],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
+    #                 piport.append((x[b'ip'].decode(),x[b'port']))
+    #                 self.peer_dict[(x[b'ip'].decode(),x[b'port'])] = True
+    #     else:
+    #         p=response_dict[b'peers']
+    #         offset=0
+    #         while offset<len(p):
+    #             ip_number = struct.unpack_from("!I", p, offset)[0]
+    #             ip = inet_ntoa(struct.pack("!I", ip_number))
+    #             offset += 4
+    #             port = struct.unpack_from("!H", p, offset)[0]
+    #             offset += 2
+    #             if((ip,port) not in piport):
+    #                 # self.peers.append(Peer(self.peer_id,self.info_hash,ip,port,self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete))
+    #                 self.peer_dict[(ip,port)] = True
+    #                 piport.append((ip,port))
     
     def udp_request(self,url,params):
         def connection_upload_udp(connection_id, action, transaction_id):
@@ -540,7 +583,6 @@ class Tracker:
         action = 0x0
         transaction_id = int(random.randrange(0, 255))
         # tracker_url = url.decode("unicode_escape")
-        # print(parse_udp_tracker_url(tracker_url))
         url, port = parse_udp_tracker_url(url)
 
         tracker_sock = socket(AF_INET, SOCK_DGRAM)
@@ -558,6 +600,7 @@ class Tracker:
         try:
             raw_conn_data, conn = tracker_sock.recvfrom(2048)
         except Exception as e:
+            print(e)
             return
         if (len(raw_conn_data) < 16):
             raise NotImplementedError()
@@ -566,15 +609,16 @@ class Tracker:
             action = struct.unpack_from("!i", raw_conn_data, 0)[0]
             exp = action==0x0
             if (action!=0x0):
-                print("Error: action didn't match expected value in 0")
+                print("error connecting")
+                return
             # transaction_id
             tid = struct.unpack_from("!i", raw_conn_data, 4)[0]
             if (tid!=transaction_id):
-                print("Error: transaction ids did not match")
+                print("error connecting")
+                return
             # connection_id
             cid = struct.unpack_from("!q", raw_conn_data, 8)[0]
 
-            # print(action, tid, cid)
 
         """
             Choose a random transaction ID.
@@ -604,7 +648,6 @@ class Tracker:
             return payload
 
         announce_payload = create_announce_payload(cid, action, transaction_id)
-        # print(announce_payload)
         tracker_sock.sendto(announce_payload, (url, port))
 
         """
@@ -624,15 +667,18 @@ class Tracker:
             # action
             action = struct.unpack_from("!i", raw_announce_data, 0)[0]
             if (action!=0x1):
-                print("Error: action didn't match expected value in 0")
+                print("error connecting")
+                return
             # transaction_id
             tid = struct.unpack_from("!i", raw_announce_data, 4)[0]
             if (tid!=transaction_id):
-                print("Error: transaction ids did not match")
+                print("error connecting")
+                return
             # interval
             interval = struct.unpack_from("!i", raw_announce_data, 8)[0]
             leechers = struct.unpack_from("!i", raw_announce_data, 12)[0]
             seeders = struct.unpack_from("!i", raw_announce_data, 16)[0]
+            self.maxInterval=max(self.maxInterval,interval)
             offset=20
             while(offset != len(raw_announce_data)):
                 # first 4 bytes is the peer IP address
@@ -640,12 +686,8 @@ class Tracker:
                 peer_IP = ".".join(str(a) for a in raw_peer_IP)
                 # next 2 bytes is the peer port address
                 peer_port = int(struct.unpack_from("!H", raw_announce_data, offset + 4)[0])
-                # print(peer_IP, peer_port)
                 self.peer_dict[peer_IP, peer_port] = True
                 offset = offset + 6
-
-            # print(interval, leechers, seeders)
-            # print("Done parsing UDP")
     
     def is_http(self,url):
         if ('http' in url):
@@ -673,50 +715,43 @@ class Tracker:
         responses=[]
         loop=0
         while(len(responses)==0 and loop<1):
-            # print(f"Looping {loop+1} time")
             i=0
             while i<len(self.tracker_urls):
                 url=self.tracker_urls[i]
                 try:
                     if self.is_http(url):
-                        # generate_heading("HTTP")
                         print(url)
                         self.http_request(url,params)
                     else:
-                        # generate_heading("UDP")
-                        print(url)
-                        self.udp_request(url,params)
+                        # self.udp_request(url,params)
+                        pass
                 except Exception as e:
-                    print("559:",e)
+                    print("error")
                 i+=1
             loop+=1
-        
+        self.lastCallTracker = time.time()
         for peer in self.peer_dict:
-            # print(peer)
             self.download_rates[(peer[0], peer[1])] = 0
             self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message,self.sayEndgame))
+        generate_heading(f"No. of peers: {len(self.peers)}")
     
     def create_message(self):
-        bitstring = "".join(self.piece_status)
+        bitstring = "".join([str(x) for x in self.piece_status])
         bitstring = bitstring.encode()
-        return 1+len(self.piece_status),bitstring
+        len_bitstring = len(bitstring)
+        return 1+len_bitstring,bitstring
     
     async def top_four(self):
         while True:
-            if (sum(self.piece_status)==self.no_pieces):
-                # generate_heading("Completed. Exiting top four...")
-                # add pure seeding
-                sys.exit(0)
             # if (self.state==1):
             if (sum(self.piece_status)>4):
-                # generate_heading("Finding top 4 peers...")
+                temp = nlargest(4,self.peers,key=lambda peer: peer.download_rate)
+                for peer in self.peers:
+                    if (peer.am_choking!=1 and peer not in temp):
+                        peer.send_choke()
+                self.unchoked_peers = temp
                 for peer in self.unchoked_peers:
-                    # print(peer.ip, peer.port)
-                    await peer.send_choke()
-                self.unchoked_peers = nlargest(4,self.peers,key=lambda peer: peer.download_rate)
-                for peer in self.unchoked_peers:
-                    # print(peer.ip, peer.port)
-                    await peer.send_unchoke()
+                    peer.send_unchoke()
             await asyncio.sleep(5)
     
     def update_rate(self,rate,ip,port):

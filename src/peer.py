@@ -125,17 +125,16 @@ class Peer:
         self.writer.write(keep_alive_message)
         await self.writer.drain()
     
-    async def send_choke(self):
+    def send_choke(self):
         # generate_heading("Sending choke")
+        self.am_choking = 1
         choke_message = struct.pack("!IB",1,0)
         self.writer.write(choke_message)
-        await self.writer.drain()
     
-    async def send_unchoke(self):
+    def send_unchoke(self):
         # generate_heading("Sending unchoke")
         unchoke_message = struct.pack("!IB",1,1)
         self.writer.write(unchoke_message)
-        await self.writer.drain()
     
     def send_cancel(self,piece_index,block_offset,block_length):
         
@@ -149,17 +148,19 @@ class Peer:
         self.downloading=0
 
     async def send_have(self,piece_index):
-        # generate_heading("Sending have")
+        generate_heading("Sending have...")
         have_message = struct.pack("!IB",5,4)
         have_message += struct.pack("!I",piece_index)
         self.writer.write(have_message)
         await self.writer.drain()
     
     def send_bitfield(self):
-        # generate_heading("Sending bitfield")
+        generate_heading("Sending bitfield")
         length,bitfield = self.create_message()
         bitfield_message = struct.pack("!IB",length,5)
-        bitfield_message += struct.pack(f"!{length-1}s", bitfield)
+        length_of_bitfield = f"!{length-1}s"
+        print(length_of_bitfield)
+        bitfield_message += struct.pack(length_of_bitfield, bitfield)
     
     def update_bitfield(self, piece_index):
         # generate_heading(f"Updated {self.ip} | {self.port}")
@@ -167,7 +168,7 @@ class Peer:
             self.present_bits[piece_index] = 1
     
     def set_bitfield(self, bitstring):
-        generate_heading(f"Bitstring for {self.ip} | {self.port}: {bitstring}")
+        # generate_heading(f"Bitstring for {self.ip} | {self.port}: {bitstring}")
         for i in range(self.no_pieces):
             if (bitstring[i]):
                 self.present_bits[i] = 1
@@ -186,8 +187,172 @@ class Peer:
 
             while True:
                 try:
+                    if (self.allDownloaded()):
+                        return
                     # print(f"176: Here1 {self.ip} | {self.port}")
                     recv_data=await asyncio.wait_for(self.reader.read(65535),5)
+                    if len(recv_data)>4:
+                        offset=0
+                        msg_len=struct.unpack_from("!i",recv_data)[0]
+                        offset+=4
+                        msg_id=struct.unpack_from("!B",recv_data,offset)[0]
+                        offset+=1
+                        if msg_id==0:
+                            # generate_heading(f"Choked by {self.ip} | {self.port}")
+                            self.peer_choking=1
+                        if msg_id==1:
+                            generate_heading(f"Unchoked by {self.ip} | {self.port}")
+                            self.peer_choking=0
+                        if msg_id==2:
+                            generate_heading(f"Interested {self.ip} | {self.port}")
+                            self.peer_interested = 1
+                            # Send bitfield
+                            await self.send_bitfield()
+                        if msg_id==3:
+                            generate_heading(f"Not Interested {self.ip} | {self.port}")
+                            self.peer_interested = 0
+                        if msg_id==4:
+                            # generate_heading(f"Have {self.ip} | {self.port}")
+                            piece_index=struct.unpack_from("!i",recv_data,offset)[0]
+                            self.update_bitfield(piece_index)
+                        if msg_id==5:
+                            # generate_heading(f"BitField {self.ip} | {self.port}")
+                            bitfield=recv_data[offset:]
+                            bitfield=bitstring.BitArray(bitfield).bin
+                            self.set_bitfield(bitfield)
+                            # print(self.ip,'---------',self.port,"-------",self.present_bits)
+                        if msg_id==6:
+                            generate_heading(f"Request {self.ip} | {self.port}")
+                            if (self.peer_interested and not(self.am_choking)):
+                                generate_heading(f"I will respond to your request soon {self.ip} {self.port}")
+                        if msg_id==7:
+                            s=recv_data[5:]
+                            while(len(s)<msg_len-1):
+                                # print(f"213 Here2 {self.ip} | {self.port}")
+                                s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
+                            self.num_downloaded_blocks += 1
+                            # generate_heading(f"Piece Received from {self.ip} | {self.port} | {self.download_start} | {time.time()} | {self.num_downloaded_blocks} | {msg_len-9}")
+                            self.get_download_rate(msg_len-9)
+                            self.update_rate(self.download_rate,self.ip,self.port)
+                            offset=0
+                            piece_index=struct.unpack_from("!i",s,offset)[0]
+                            offset+=4
+                            block_offset=struct.unpack_from("!i",s,offset)[0]
+                            offset+=4
+                            block=s[offset:]
+                            # generate_heading(f"block length: {len(block)}")
+                            self.downloading=0
+                            generate_heading(f"Piece Received from {self.ip} | {self.port} | {piece_index} | {block_offset} | {len(block)}")
+                            await self.write_block(piece_index,block_offset,block,self.ip,self.port)
+                            # if(self.num_downloaded_blocks%5==0):
+                            #     await asyncio.sleep(10)
+                            # await asyncio.sleep(3)
+                        if msg_id==8:
+                            # generate_heading(f"Cancel {self.ip} | {self.port}")
+                            pass
+                    # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
+                        if (self.am_interested and self.peer_choking==0 and self.downloading==0 and np.sum(self.present_bits)>0):
+                            piece_no, block_offset, block_size, piece_status=await self.get_piece_block(self.ip,self.port)
+                            if(piece_status==True):
+                                # print("240")
+                                # self.writer.close()
+                                # await self.writer.wait_closed()
+                                return
+                            if(piece_no==None):
+                                # print("yay")
+                                pass
+                            else:
+                                # generate_heading(f"Requesting {piece_no} | {block_offset} | {block_size} | using {self.ip} | {self.port}")
+                                if(self.present_bits[piece_no]==1 and not self.isEngame()):
+                                    self.downloading=1
+                                    await self.send_request_message(piece_no,block_offset,block_size)
+                                    self.download_start = time.time()
+
+                            
+                            # piece_no,piece_status,exp = self.get_piece_index()
+                            # print(piece_no,piece_status,exp)
+                            # print(f"Here 1 {piece_no}")
+                            # if piece_status==True:
+                            #     # self.writer.close()
+                            #     # self.complete()
+                            #     break
+                            # if self.present_bits[piece_no]==1:
+                            #     print(f"Here 2")
+                            #     self.downloading=1
+                            #     block_offset,block_length =self.find_next_block(piece_no,exp)
+                            #     print(f"Here 3 {piece_no} | {block_offset}")
+                            #     generate_heading(f"Requesting {piece_no} from {self.ip} | {self.port}")
+                            #     self.send_request_message(piece_no,block_offset,block_length)
+                            #     self.in_download_piece = piece_no
+                            #     self.in_download_block = block_offset
+                            #     self.in_download_length = block_length
+                        current = round(time.time())
+                        if (current>self.began_at + 120):
+                            self.began_at = current
+                            self.send_keep_alive()
+                
+                except ConnectionResetError:
+                    print("274: Connection reset error")
+                    # self.writer.close()
+                    self.downloading = 0
+                    # VEDANSHI: await self.connect()
+                    # await self.writer.wait_closed()
+                    # break
+                    return
+                except Exception as e:
+                    # exc_type, exc_obj, exc_tb = sys.exc_info()
+                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    # print(exc_type, fname, exc_tb.tb_lineno)
+                    # print(self.downloading,e)
+                    pass
+                else:
+                    if(self.allDownloaded()):
+                        # print("291")
+                        # self.writer.close()
+                        # await self.writer.wait_closed()
+                        return
+                    # print(f"292: {self.ip} | {self.port}")
+                    if(self.downloading==1 and not self.isEngame):
+                        if(self.download_start+25<time.time()):
+                            #block has timed out, so request for a new one
+                            self.downloading=0
+                    
+                    #piece would not have been found request for a new one
+                    if(self.downloading==0 and self.peer_choking==0 and self.am_interested and sum(self.present_bits)>0):
+                        # print(f"301: hey im here {self.ip} {self.port}")
+                        pno,blo,bls,st=await self.get_piece_block(self.ip,self.port)
+                        if(st==True):
+                            print("306")
+                            # self.writer.close()
+                            return
+                        if(pno==None):
+                            print("piece no. NONE")
+                            pass
+                        else:
+                            if(self.present_bits[pno]==1 and not self.isEngame()):
+                                self.downloading=1
+                                await self.send_request_message(pno,blo,bls)
+                                self.download_start=time.time()
+                    else:
+                        pass
+            # await self.pure_seeding()
+        except Exception as e:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            print(exc_obj)
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print("331",exc_type, fname, exc_tb.tb_lineno)
+            self.writer.close()
+            return
+
+    async def pure_seeding(self):
+        try:
+            generate_heading(f"Entered pure seeding {self.ip} {self.port}")
+            print(self.writer, self.reader)
+            print(self.reader.exception)
+            self.send_bitfield()
+            while True:
+                try:
+                    recv_data = await asyncio.wait_for(self.reader.read(65535), 5)
                     if len(recv_data)>4:
                         offset=0
                         msg_len=struct.unpack_from("!i",recv_data)[0]
@@ -219,133 +384,31 @@ class Peer:
                         if msg_id==6:
                             generate_heading(f"Request {self.ip} | {self.port}")
                             pass
-                        if msg_id==7:
-                            s=recv_data[5:]
-                            while(len(s)<msg_len-1):
-                                # print(f"213 Here2 {self.ip} | {self.port}")
-                                s+=await asyncio.wait_for(self.reader.read(msg_len-1),10)
-                            self.num_downloaded_blocks += 1
-                            # generate_heading(f"Piece Received from {self.ip} | {self.port} | {self.download_start} | {time.time()} | {self.num_downloaded_blocks} | {msg_len-9}")
-                            self.get_download_rate(msg_len-9)
-                            self.update_rate(self.download_rate,self.ip,self.port)
-                            offset=0
-                            piece_index=struct.unpack_from("!i",s,offset)[0]
-                            offset+=4
-                            block_offset=struct.unpack_from("!i",s,offset)[0]
-                            offset+=4
-                            block=s[offset:]
-                            # generate_heading(f"block length: {len(block)}")
-                            self.downloading=0
-                            generate_heading(f"Piece Received from {self.ip} | {self.port} | {piece_index} | {block_offset} | {len(block)}")
-                            await self.write_block(piece_index,block_offset,block,self.ip,self.port)
-                            # if(self.num_downloaded_blocks%5==0):
-                            #     await asyncio.sleep(10)
-                            # await asyncio.sleep(3)
-                        if msg_id==8:
-                            # generate_heading(f"Cancel {self.ip} | {self.port}")
-                            pass
-                    # generate_heading(f"166:- Interested: {self.am_interested} | Choking: {self.peer_choking} | Downloading: {self.downloading} | {self.ip} | {self.port}")
-                        if (self.am_interested and self.peer_choking==0 and self.downloading==0 and np.sum(self.present_bits)>0):
-                            piece_no, block_offset, block_size, piece_status=await self.get_piece_block(self.ip,self.port)
-                            if(piece_status==True):
-                                # print("240")
-                                self.writer.close()
-                                # await self.writer.wait_closed()
-                                break
-                            if(piece_no==None):
-                                # print("yay")
-                                pass
-                            else:
-                                # generate_heading(f"Requesting {piece_no} | {block_offset} | {block_size} | using {self.ip} | {self.port}")
-                                if(self.present_bits[piece_no]==1 and not self.isEngame()):
-                                    self.downloading=1
-                                    await self.send_request_message(piece_no,block_offset,block_size)
-                                    self.download_start = time.time()
-
-                            
-                            # piece_no,piece_status,exp = self.get_piece_index()
-                            # print(piece_no,piece_status,exp)
-                            # print(f"Here 1 {piece_no}")
-                            # if piece_status==True:
-                            #     self.writer.close()
-                            #     # self.complete()
-                            #     break
-                            # if self.present_bits[piece_no]==1:
-                            #     print(f"Here 2")
-                            #     self.downloading=1
-                            #     block_offset,block_length =self.find_next_block(piece_no,exp)
-                            #     print(f"Here 3 {piece_no} | {block_offset}")
-                            #     generate_heading(f"Requesting {piece_no} from {self.ip} | {self.port}")
-                            #     self.send_request_message(piece_no,block_offset,block_length)
-                            #     self.in_download_piece = piece_no
-                            #     self.in_download_block = block_offset
-                            #     self.in_download_length = block_length
-                        current = round(time.time())
-                        if (current>self.began_at + 120):
-                            self.began_at = current
-                            self.send_keep_alive()
-                
-                except ConnectionResetError:
-                    print("274: Connection reset error")
-                    # self.writer.close()
-                    self.downloading = 0
+                    break
+                except BrokenPipeError:
                     await self.connect()
-                    # await self.writer.wait_closed()
-                    # break
+                    await self.send_handshake()
+                    return
+                except ConnectionResetError as e:
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print("391",exc_type, fname, exc_tb.tb_lineno)
+                    print(exc_obj)
                 except Exception as e:
-                    # exc_type, exc_obj, exc_tb = sys.exc_info()
-                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    # print(exc_type, fname, exc_tb.tb_lineno)
-                    # print(self.downloading,e)
-                    if(self.allDownloaded()):
-                        # print("291")
-                        self.writer.close()
-                        # await self.writer.wait_closed()
-                        break
-                    # print(f"292: {self.ip} | {self.port}")
-                    if(self.downloading==1 and not self.isEngame):
-                        if(self.download_start+25<time.time()):
-                            #block has timed out, so request for a new one
-                            self.downloading=0
-                    
-                    #piece would not have been found request for a new one
-                    if(self.downloading==0 and self.peer_choking==0 and self.am_interested and sum(self.present_bits)>0):
-                        # print(f"301: hey im here {self.ip} {self.port}")
-                        pno,blo,bls,st=await self.get_piece_block(self.ip,self.port)
-                        if(st==True):
-                            print("306")
-                            self.writer.close()
-                            break
-                        if(pno==None):
-                            print("piece no. NONE")
-                            pass
-                        else:
-                            if(self.present_bits[pno]==1 and not self.isEngame()):
-                                self.downloading=1
-                                await self.send_request_message(pno,blo,bls)
-                                self.download_start=time.time()
-                    else:
-                        pass
-
-
-
-                    # exc_type, exc_obj, exc_tb = sys.exc_info()
-                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    # print(exc_type, fname, exc_tb.tb_lineno)
-                    # p,ps,_=self.get_piece_index()
-                    # if(ps==True):
-                    #     print("Closing other peers as all pieces done")
-                    #     self.writer.close()
-                    #     break
-                    
-                    # pass
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print("396",exc_type, fname, exc_tb.tb_lineno)
+                    print(exc_obj)
+        except ConnectionResetError as e:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print("401",exc_type, fname, exc_tb.tb_lineno)
+            print(exc_obj)
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
-            print(exc_obj)
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print("331",exc_type, fname, exc_tb.tb_lineno)
-            self.writer.close()
-
+            print("406",exc_type, fname, exc_tb.tb_lineno)
+            print(exc_obj)
 
     # def read_and_write_messages(self,client):
     #     client.settimeout(None)
