@@ -20,6 +20,8 @@ from heapq import nlargest
 import os
 
 piport = []
+ENDGAME = 7
+
 class Tracker:
     def __init__(self,filename):
         self.filename='../torrent_files/'+filename
@@ -85,6 +87,7 @@ class Tracker:
             self.num_downloaded_blocks=0
             self.piece_queue=[]
             self.to_be_downloaded={}
+            self.inEndgame=0
             if(self.mode==1):
                 print(self.multi_files)
     
@@ -101,44 +104,82 @@ class Tracker:
             #single file
             with open(self.fileordir_name,"w") as f:
                 pass
+    
+    def sayEndgame(self):
+        if(self.inEndgame):
+            return True
+        else:
+            return False
+
     def allDownloaded(self):
         # print(self.piece_status)
         if(sum(self.piece_status)==self.no_pieces):
             self.top_four_task.cancel()
             return True
         return False
+    
+    async def end_game_mode(self,ip,port):
+        exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
+        if(len(exp_blocks)>0):
+            i=np.random.randint(0,len(exp_blocks))
+            exp_blocks[i].began_requesting=time.time()
+            heapq.heapify(self.block_heap)
+            for p in self.peers:
+                p.downloading=1
+                await p.send_request_message(exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
+        else:
+            bo,bl=self.find_next_block(self.piece_queue[0],ip,port)
+            generate_heading(f"Found {bo} {bl}")
+            if (bo!=None):
+                a=Block(self.piece_queue[0],bo,bl)
+                heapq.heappush(self.block_heap,a)
+                heapq.heapify(self.block_heap)
+                self.pieces[self.piece_queue[0]][math.ceil(bo/2**14)]=a
+                for p in self.peers:
+                    # if(p.downloading==0):
+                    p.downloading=1
+                    await p.send_request_message(self.piece_queue[0],bo,bl)
 
-    def get_piece_block(self,ip,port):
+    async def get_piece_block(self,ip,port):
         # check if all pieces have been receive
         if(sum(self.piece_status)==self.no_pieces):
             self.top_four_task.cancel()
             return (None,None,None,True)
-        
-        exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
-        
-        if(len(exp_blocks)>0):#check if any block has expired
-            # generate_heading("Picking an expired block")
-            i=np.random.randint(0,len(exp_blocks))
-            exp_blocks[i].began_requesting=time.time()
-            heapq.heapify(self.block_heap)
-            return (exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
-        else:
-            generate_heading(f"Piece and block number being requested by {ip} | {port}")
-            generate_heading(f"Queue size: {len(self.piece_queue)}")
-            i=0
-            while(i<min(5,len(self.piece_queue))):
-                self.downloading_piece=self.piece_queue[i]
-                block_offset,block_size=self.find_next_block(self.downloading_piece,ip,port)
-                if(block_offset!=None):
-                    a=Block(self.downloading_piece,block_offset,block_size)
-                    heapq.heappush(self.block_heap,a)
-                    heapq.heapify(self.block_heap)
-                    self.pieces[self.downloading_piece][math.ceil(block_offset/2**14)]=a
-                    return (self.downloading_piece,block_offset,block_size,False)
-                i+=1
-                    
-
+        if(self.num_blocks*(self.no_pieces-1)+self.num_blocks_last-self.num_downloaded_blocks<ENDGAME):
+            #call endgame function
+            #once done return N,N,N,T
+            self.state = 2
+            self.inEndgame=1
+            generate_heading("In Endgame Mode")
+            await self.end_game_mode(ip,port)
             return (None,None,None,False)
+        else:
+            exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
+        
+            if(len(exp_blocks)>0):#check if any block has expired
+                # generate_heading("Picking an expired block")
+                i=np.random.randint(0,len(exp_blocks))
+                exp_blocks[i].began_requesting=time.time()
+                heapq.heapify(self.block_heap)
+                return (exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size,False)
+            else:
+                # Random first or rarest first
+                generate_heading(f"Piece and block number being requested by {ip} | {port}")
+                generate_heading(f"Queue size: {len(self.piece_queue)}")
+                i=0
+                while(i<min(5,len(self.piece_queue))):
+                    self.downloading_piece=self.piece_queue[i]
+                    block_offset,block_size=self.find_next_block(self.downloading_piece,ip,port)
+                    if(block_offset!=None):
+                        a=Block(self.downloading_piece,block_offset,block_size)
+                        heapq.heappush(self.block_heap,a)
+                        heapq.heapify(self.block_heap)
+                        self.pieces[self.downloading_piece][math.ceil(block_offset/2**14)]=a
+                        return (self.downloading_piece,block_offset,block_size,False)
+                    i+=1
+                        
+
+                return (None,None,None,False)
 
     def print_hashes(self):
         for idx,hash in self.hashes.items():
@@ -239,32 +280,58 @@ class Tracker:
         for peer in self.peers:
             peer.send_have(piece_index)
     
-    async def write_block(self,piece_index,block_offset,block_data):
+    async def write_block(self,piece_index,block_offset,block_data,ip,port):
         # if(self.pieces[piece_index][math.ceil(block_offset/2**14)].status==2):
         #     return
         # generate_heading(f"{piece_index} | {block_offset} |")
         # self.pieces[piece_index][math.ceil(block_offset/2**14)]=Block(piece_index,math.ceil(block_offset/2**14),len(block_data))
+        if(self.pieces[piece_index][math.ceil(block_offset/2**14)].data==b''):
+            self.num_downloaded_blocks+=1
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
-        self.num_downloaded_blocks+=1
+        
         self.download_progress()
         # try:
         #     await self.download_progress()
         # except Exception as e:
         #     print("error while printing download progress:",e)
+        if(self.inEndgame):
+            for p in self.peers:
+                if(p.ip!=ip or p.port!=port):
+                    p.send_cancel(piece_index,block_offset,len(block_data))   
+                p.downloading=0
+        if(sum(self.piece_status)==4):
+            generate_heading(f"Entered rarest first")
+            self.state=1
         if (self.is_piece_complete(piece_index)):
             is_verified,data = self.verify_piece(piece_index)
             if (is_verified):
                 # Need to await here
+                generate_heading(f"Verified piece {piece_index}")
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
+                print(f"Before Popping:",self.piece_queue)
                 self.piece_queue.remove(piece_index)
+                print(f"Piece No. Popped {piece_index}",self.piece_queue)
                 generate_heading(f"Length of t be downloaded: {len(self.to_be_downloaded)}")
-                if(len(self.to_be_downloaded)):
-                    k=np.random.randint(len(self.to_be_downloaded))
-                    generate_heading(f"Adding piece {self.to_be_downloaded[k]} to the queue")
-                    self.piece_queue.append(self.to_be_downloaded[k])
-                    self.to_be_downloaded.remove(self.to_be_downloaded[k])
+                if(len(self.to_be_downloaded)!=0):
+                    generate_heading("What are you looking at?")
+                    # Random first
+                    if (self.state==0):
+                        k=np.random.randint(len(self.to_be_downloaded))
+                        k=self.to_be_downloaded[k]
+                    # Rarest first
+                    elif (self.state==1):
+                        k = self.get_rarest_piece()
+                    generate_heading(f"Adding piece {k} to the queue")
+                    self.piece_queue.append(k)
+                    self.to_be_downloaded.remove(k)
+                await self.write_piece(piece_index,data)
+                self.broadcast_have(piece_index)
+            else:
+                generate_heading(f"Corrupted Block {piece_index}")
+                self.num_downloaded_blocks-=len(self.pieces[piece_index])
+                self.pieces[piece_index] = {}
                 # if(sum(self.piece_status)<self.no_pieces):
                 #     flag=True
                 #     while flag:
@@ -274,9 +341,6 @@ class Tracker:
                 #         else:
                 #             flag=False
                 #             self.piece_queue.append(k)
-
-                await self.write_piece(piece_index,data)
-                self.broadcast_have(piece_index)
                 # del self.pieces[piece_index]
                 # generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
@@ -284,14 +348,12 @@ class Tracker:
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
         # print("139: meow",len(self.block_heap))
         heapq.heapify(self.block_heap)
-        if(sum(self.piece_status)==4):
-            self.state=1
     
     def download_progress(self):
         percent=(self.num_downloaded_blocks/((self.no_pieces-1)*self.num_blocks+self.num_blocks_last))*100
         # print(percent)
         arr=["#"]*math.ceil(percent)+[" "]*(100-math.ceil(percent))
-        os.system('clear')
+        # os.system('clear')
         generate_heading(''.join(arr))
     
     def get_last_piece(self,piece_index):
@@ -340,7 +402,7 @@ class Tracker:
                 # self.pieces[piece_index][i]=a
                 return (2**14*i,2**14)
         if (not(flag)):
-            print(f"don't be here, fool!!!!!!!!! {ip} | {port}")
+            print(f"don't be here, fool!!!!!!!!! {piece_index} | {ip} | {port}")
             return (None,None)
     
     # def try_handshake(self,client,peer_index):
@@ -363,7 +425,7 @@ class Tracker:
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
         # print(len(self.peers))
-        self.piece_queue = list(np.random.randint(self.no_pieces,size=5))
+        self.piece_queue = list(np.random.choice(self.no_pieces,size=5,replace=False))
         self.to_be_downloaded = list(set(self.to_be_downloaded)-set(self.piece_queue))
         self.top_four_task=asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin(math.ceil((self.no_pieces-1)*self.num_blocks+self.num_blocks_last)/len(self.peers)) for peer in self.peers]))
@@ -376,7 +438,7 @@ class Tracker:
         min_elems = np.argsort(piece_available_freq)
         # print(min_elems[:3])
         for elem in min_elems:
-            if (self.piece_status[elem]):
+            if (self.piece_status[elem] or elem not in self.to_be_downloaded):
                 continue
             else:
                 return elem
@@ -435,6 +497,7 @@ class Tracker:
 
     def http_request(self,url,params):
         params["compact"] = 1
+        print(params)
         announce_response = requests.get(url,params).content
         response_dict = bencodepy.decode(announce_response)
         if(type(response_dict[b'peers'])==list):
@@ -583,7 +646,7 @@ class Tracker:
 
             # print(interval, leechers, seeders)
             # print("Done parsing UDP")
-        
+    
     def is_http(self,url):
         if ('http' in url):
             return True
@@ -596,9 +659,10 @@ class Tracker:
         if(self.peer_id==''):
             self.peer_id='VS2083'+str(random.randint(10000000000000, 99999999999999))
         i=0
+        self.peer_id = self.peer_id.encode()
         params={
             "info_hash":self.info_hash,
-            "peer_id":self.peer_id.encode(),
+            "peer_id":self.peer_id,
             "port":self.port,
             "uploaded":self.uploaded,
             "downloaded":self.downloaded,
@@ -616,13 +680,12 @@ class Tracker:
                 try:
                     if self.is_http(url):
                         # generate_heading("HTTP")
-                        # print(url)
+                        print(url)
                         self.http_request(url,params)
                     else:
                         # generate_heading("UDP")
-                        # print(url)
-                        pass
-                        # self.udp_request(url,params)
+                        print(url)
+                        self.udp_request(url,params)
                 except Exception as e:
                     print("559:",e)
                 i+=1
@@ -631,7 +694,7 @@ class Tracker:
         for peer in self.peer_dict:
             # print(peer)
             self.download_rates[(peer[0], peer[1])] = 0
-            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message))
+            self.peers.append(Peer(self.peer_id,self.info_hash,peer[0],peer[1],self.no_pieces,self.find_next_block,self.write_block,self.get_piece_index,self.rerequest_piece,self.complete,self.get_piece_block,self.allDownloaded,self.update_rate,self.create_message,self.sayEndgame))
     
     def create_message(self):
         bitstring = "".join(self.piece_status)
