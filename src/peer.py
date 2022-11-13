@@ -286,10 +286,12 @@ class Peer:
                             self.send_keep_alive()
                 
                 except ConnectionResetError:
-                    # print("274: Connection reset error")
-                    self.writer.close()
+                    print("274: Connection reset error")
+                    # self.writer.close()
+                    self.downloading = 0
+                    await self.connect()
                     # await self.writer.wait_closed()
-                    break
+                    # break
                 except Exception as e:
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
                     # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -311,11 +313,11 @@ class Peer:
                         # print(f"301: hey im here {self.ip} {self.port}")
                         pno,blo,bls,st=await self.get_piece_block(self.ip,self.port)
                         if(st==True):
-                            # print("306")
+                            print("306")
                             self.writer.close()
                             break
                         if(pno==None):
-                            # print("piece no. NONE")
+                            print("piece no. NONE")
                             pass
                         else:
                             if(self.present_bits[pno]==1 and not self.isEngame()):

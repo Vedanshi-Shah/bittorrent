@@ -275,10 +275,10 @@ class Tracker:
                 await f.write(data)
         # f.close()
     
-    def broadcast_have(self, piece_index):
+    async def broadcast_have(self, piece_index):
         # generate_heading("Broadcasting have...")
         for peer in self.peers:
-            peer.send_have(piece_index)
+            await peer.send_have(piece_index)
     
     async def write_block(self,piece_index,block_offset,block_data,ip,port):
         # if(self.pieces[piece_index][math.ceil(block_offset/2**14)].status==2):
