@@ -191,6 +191,9 @@ class Peer:
             while True:
                 try:
                     if (self.allDownloaded()):
+                        self.downloading = 1
+                        self.download_start = time.time()
+                        # pass
                         return
                     # print(f"176: Here1 {self.ip} | {self.port}")
                     recv_data=await asyncio.wait_for(self.reader.read(65535),5)
@@ -303,11 +306,21 @@ class Peer:
                 
                 except ConnectionResetError:
                     print("274: Connection reset error")
-                    # self.writer.close()
+                    self.writer.close()
+                    self.writer = None
                     self.downloading = 0
-                    # VEDANSHI: await self.connect()
+                    # await self.connect()
                     # await self.writer.wait_closed()
                     # break
+                    print(f"{self.ip} {self.port} returned")
+                    return
+                except BrokenPipeError:
+                    # print("Broken Pipe Error")
+                    # await self.connect()
+                    # await self.send_handshake()
+                    # await self.send_interested()
+                    self.writer.close()
+                    self.writer = None
                     return
                 except Exception as e:
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -320,10 +333,13 @@ class Peer:
                         # print("291")
                         # self.writer.close()
                         # await self.writer.wait_closed()
-                        return
+                        # return
+                        self.downloading = 1
+                        self.download_start = time.time()
+                        pass
                     # print(f"292: {self.ip} | {self.port}")
                     if(self.downloading==1 and not self.isEngame):
-                        if(self.download_start+25<time.time()):
+                        if(self.download_start+10<time.time()):
                             #block has timed out, so request for a new one
                             self.downloading=0
                     
@@ -333,7 +349,9 @@ class Peer:
                         pno,blo,bls,st=await self.get_piece_block(self.ip,self.port)
                         if(st==True):
                             print("306")
-                            # self.writer.close()
+                            self.writer.close()
+                            self.downloading = 1
+                            self.download_start = time.time()
                             return
                         if(pno==None):
                             print("piece no. NONE")
@@ -412,6 +430,9 @@ class Peer:
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     print("396",exc_type, fname, exc_tb.tb_lineno)
                     print(exc_obj)
+        except BrokenPipeError:
+            self.writer.close()
+            self.writer = None
         except ConnectionResetError as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]

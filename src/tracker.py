@@ -119,7 +119,7 @@ class Tracker:
         return False
     
     async def end_game_mode(self,ip,port):
-        exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
+        exp_blocks=[b for b in self.block_heap if b.began_requesting+10<time.time()]
         if(len(exp_blocks)>0):
             i=np.random.randint(0,len(exp_blocks))
             exp_blocks[i].began_requesting=time.time()
@@ -141,26 +141,26 @@ class Tracker:
                     await p.send_request_message(self.piece_queue[0],bo,bl)
     
     async def send_block(self,piece_index,block_offset,block_length,writer):
-        if self.mode==1:
-            writer.write(self.pieces[piece_index][block_offset])
-            await writer.drain()
-        else:
-            # Open the file
-            pos = piece_index * self.piece_length
-            async with aiofiles.open(self.filename, "rb+") as f:
-                await f.seek(pos,0)
-                data = await f.read(block_length)
-                writer.write(data)
+        generate_heading(f"Sending {piece_index} {block_offset} {block_length}")
+        if (self.piece_status[piece_index]==1):
+            if self.mode==1:
+                writer.write(self.pieces[piece_index][block_offset])
                 await writer.drain()
-            # Find the offset
-            # Read
+            else:
+                # Open the file
+                pos = piece_index * self.piece_length
+                async with aiofiles.open(self.filename, "rb+") as f:
+                    await f.seek(pos,0)
+                    data = await f.read(block_length)
+                    writer.write(data)
+                    await writer.drain()
 
     async def get_piece_block(self,ip,port):
         # check if all pieces have been receive
         if(sum(self.piece_status)>=self.no_pieces):
             # self.top_four_task.cancel()
             return (None,None,None,True)
-        if(self.num_blocks*(self.no_pieces-1)+self.num_blocks_last-self.num_downloaded_blocks<ENDGAME):
+        if(self.no_pieces>=ENDGAME and self.num_blocks*(self.no_pieces-1)+self.num_blocks_last-self.num_downloaded_blocks<ENDGAME):
             #call endgame function
             #once done return N,N,N,T
             self.state = 2
@@ -169,7 +169,7 @@ class Tracker:
             await self.end_game_mode(ip,port)
             return (None,None,None,False)
         else:
-            exp_blocks=[b for b in self.block_heap if b.began_requesting+25<time.time()]
+            exp_blocks=[b for b in self.block_heap if b.began_requesting+10<time.time()]
         
             if(len(exp_blocks)>0):#check if any block has expired
                 # generate_heading("Picking an expired block")
@@ -442,7 +442,7 @@ class Tracker:
         # generate_heading(f"No. of Peers: {len(self.peers)}")
         self.peers=[peer for peer in self.peers if peer.writer!=None and peer.reader!=None]
         # print(len(self.peers))
-        self.piece_queue = list(np.random.choice(self.no_pieces,size=5,replace=False))
+        self.piece_queue = list(np.random.choice(self.no_pieces,size=min(5,self.no_pieces),replace=False))
         self.to_be_downloaded = list(set(self.to_be_downloaded)-set(self.piece_queue))
         self.top_four_task=asyncio.create_task(self.top_four())
         await asyncio.gather(*([peer.begin(math.ceil((self.no_pieces-1)*self.num_blocks+self.num_blocks_last)/len(self.peers)) for peer in self.peers]))
