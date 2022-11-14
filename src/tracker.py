@@ -129,7 +129,7 @@ class Tracker:
                 await p.send_request_message(exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
         else:
             bo,bl=self.find_next_block(self.piece_queue[0],ip,port)
-            generate_heading(f"Found {bo} {bl}")
+            # generate_heading(f"Found {bo} {bl}")
             if (bo!=None):
                 a=Block(self.piece_queue[0],bo,bl)
                 heapq.heappush(self.block_heap,a)
@@ -165,7 +165,7 @@ class Tracker:
             #once done return N,N,N,T
             self.state = 2
             self.inEndgame=1
-            generate_heading("In Endgame Mode")
+            # generate_heading("In Endgame Mode")
             await self.end_game_mode(ip,port)
             return (None,None,None,False)
         else:
@@ -179,8 +179,8 @@ class Tracker:
                 return (exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size,False)
             else:
                 # Random first or rarest first
-                generate_heading(f"Piece and block number being requested by {ip} | {port}")
-                generate_heading(f"Queue size: {len(self.piece_queue)}")
+                # generate_heading(f"Piece and block number being requested by {ip} | {port}")
+                # generate_heading(f"Queue size: {len(self.piece_queue)}")
                 i=0
                 while(i<min(5,len(self.piece_queue))):
                     self.downloading_piece=self.piece_queue[i]
@@ -273,6 +273,7 @@ class Tracker:
             
             data_offset = 0
             last_length = start_pos
+            generate_heading(f"Piece Index: {piece_index} :-> {(si,ei)}")
             for i in range(si,ei+1):
                 end=min(self.cumulative_len[i],end_pos)
                 async with aiofiles.open(self.fileordir_name+"/"+self.multi_files[i][0],"rb+") as f:
@@ -318,21 +319,21 @@ class Tracker:
                     p.send_cancel(piece_index,block_offset,len(block_data))   
                 p.downloading=0
         if(sum(self.piece_status)==4):
-            generate_heading(f"Entered rarest first")
+            # generate_heading(f"Entered rarest first")
             self.state=1
         if (self.is_piece_complete(piece_index)):
             is_verified,data = self.verify_piece(piece_index)
             if (is_verified):
                 # Need to await here
-                generate_heading(f"Verified piece {piece_index}")
+                # generate_heading(f"Verified piece {piece_index}")
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
-                print(f"Before Popping:",self.piece_queue)
+                # print(f"Before Popping:",self.piece_queue)
                 self.piece_queue.remove(piece_index)
-                print(f"Piece No. Popped {piece_index}",self.piece_queue)
-                generate_heading(f"Length of t be downloaded: {len(self.to_be_downloaded)}")
+                # print(f"Piece No. Popped {piece_index}",self.piece_queue)
+                # generate_heading(f"Length of t be downloaded: {len(self.to_be_downloaded)}")
                 if(len(self.to_be_downloaded)!=0):
-                    generate_heading("What are you looking at?")
+                    # generate_heading("What are you looking at?")
                     # Random first
                     if (self.state==0):
                         k=np.random.randint(len(self.to_be_downloaded))
@@ -340,13 +341,13 @@ class Tracker:
                     # Rarest first
                     elif (self.state==1):
                         k = self.get_rarest_piece()
-                    generate_heading(f"Adding piece {k} to the queue")
+                    # generate_heading(f"Adding piece {k} to the queue")
                     self.piece_queue.append(k)
                     self.to_be_downloaded.remove(k)
                 await self.write_piece(piece_index,data)
                 await self.broadcast_have(piece_index)
             else:
-                generate_heading(f"Corrupted Piece {piece_index}")
+                # generate_heading(f"Corrupted Piece {piece_index}")
                 self.num_downloaded_blocks-=len(self.pieces[piece_index])
                 self.pieces[piece_index] = {}
                 # if(sum(self.piece_status)<self.no_pieces):
@@ -500,7 +501,7 @@ class Tracker:
     
     def complete(self):
         data = b""
-        generate_heading("Complete called...")
+        # generate_heading("Complete called...")
         # self.top_four_task.cancel()
         # self.top_four_task = asyncio.create_task()
         # generate_heading("Here")

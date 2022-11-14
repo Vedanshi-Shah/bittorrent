@@ -110,7 +110,7 @@ class Peer:
     async def send_request_message(self,piece_index,block_offset,block_length):
         # Index, Block Offset, Block length
         # print(piece_index, block_offset, block_length)
-        generate_heading(f"Requesting {piece_index} | {block_offset} | {block_length} | {self.ip} | {self.port}")
+        # generate_heading(f"Requesting {piece_index} | {block_offset} | {block_length} | {self.ip} | {self.port}")
         req_message=struct.pack("!IB",13,6)
         payload = struct.pack("!i", piece_index)
         payload += struct.pack("!i", block_offset)
@@ -141,7 +141,7 @@ class Peer:
     
     def send_cancel(self,piece_index,block_offset,block_length):
         
-        generate_heading(f"Canceling {piece_index} | {block_offset} | {block_length} | {self.ip} | {self.port}")
+        # generate_heading(f"Canceling {piece_index} | {block_offset} | {block_length} | {self.ip} | {self.port}")
         can_msg=struct.pack("!IB",13,8)
         payload=struct.pack("!i",piece_index)
         payload+=struct.pack("!i",block_offset)
@@ -151,14 +151,14 @@ class Peer:
         self.downloading=0
 
     async def send_have(self,piece_index):
-        generate_heading("Sending have...")
+        # generate_heading("Sending have...")
         have_message = struct.pack("!IB",5,4)
         have_message += struct.pack("!I",piece_index)
         self.writer.write(have_message)
         await self.writer.drain()
     
     def send_bitfield(self):
-        generate_heading("Sending bitfield")
+        # generate_heading("Sending bitfield")
         length,bitfield = self.create_message()
         bitfield_message = struct.pack("!IB",length,5)
         length_of_bitfield = f"!{length-1}s"
@@ -255,7 +255,7 @@ class Peer:
                             block=s[offset:]
                             # generate_heading(f"block length: {len(block)}")
                             self.downloading=0
-                            generate_heading(f"Piece Received from {self.ip} | {self.port} | {piece_index} | {block_offset} | {len(block)}")
+                            # generate_heading(f"Piece Received from {self.ip} | {self.port} | {piece_index} | {block_offset} | {len(block)}")
                             await self.write_block(piece_index,block_offset,block,self.ip,self.port)
                             # if(self.num_downloaded_blocks%5==0):
                             #     await asyncio.sleep(10)
@@ -308,6 +308,7 @@ class Peer:
                     print("274: Connection reset error")
                     self.writer.close()
                     self.writer = None
+                    self.reader=None
                     self.downloading = 0
                     # await self.connect()
                     # await self.writer.wait_closed()
@@ -321,6 +322,7 @@ class Peer:
                     # await self.send_interested()
                     self.writer.close()
                     self.writer = None
+                    self.reader=None
                     return
                 except Exception as e:
                     # exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -370,6 +372,8 @@ class Peer:
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print("331",exc_type, fname, exc_tb.tb_lineno)
             self.writer.close()
+            self.reader=None
+            self.writer=None
             return
 
     async def pure_seeding(self):
