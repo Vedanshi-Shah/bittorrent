@@ -43,7 +43,7 @@ class Peer:
         self.download_start = 0
         self.create_message = create_message
         self.isEngame=isEngame
-        self.send_block = send_block
+        self.send_block = send_block    
     
     def average_rate(self,curr_rate,new_rate):
         return (curr_rate*(self.num_downloaded_blocks-1)+new_rate)/(self.num_downloaded_blocks)
@@ -150,20 +150,21 @@ class Peer:
         self.writer.write(can_msg)
         self.downloading=0
 
-    async def send_have(self,piece_index):
+    def send_have(self,piece_index):
         # generate_heading("Sending have...")
         have_message = struct.pack("!IB",5,4)
         have_message += struct.pack("!I",piece_index)
         self.writer.write(have_message)
-        await self.writer.drain()
+        
     
     def send_bitfield(self):
-        # generate_heading("Sending bitfield")
+        generate_heading("Sending bitfield")
         length,bitfield = self.create_message()
         bitfield_message = struct.pack("!IB",length,5)
         length_of_bitfield = f"!{length-1}s"
         print(length_of_bitfield)
         bitfield_message += struct.pack(length_of_bitfield, bitfield)
+        self.writer.write(bitfield_message)
     
     def update_bitfield(self, piece_index):
         # generate_heading(f"Updated {self.ip} | {self.port}")
@@ -218,7 +219,7 @@ class Peer:
                             generate_heading(f"Not Interested {self.ip} | {self.port}")
                             self.peer_interested = 0
                         if msg_id==4:
-                            # generate_heading(f"Have {self.ip} | {self.port}")
+                            generate_heading(f"Have {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             self.update_bitfield(piece_index)
                         if msg_id==5:
@@ -316,7 +317,7 @@ class Peer:
                     print(f"{self.ip} {self.port} returned")
                     return
                 except BrokenPipeError:
-                    # print("Broken Pipe Error")
+                    print("Broken Pipe Error")
                     # await self.connect()
                     # await self.send_handshake()
                     # await self.send_interested()
@@ -325,10 +326,10 @@ class Peer:
                     self.reader=None
                     return
                 except Exception as e:
-                    # exc_type, exc_obj, exc_tb = sys.exc_info()
-                    # fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    # print(exc_type, fname, exc_tb.tb_lineno)
-                    # print(self.downloading,e)
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print(exc_type, fname, exc_tb.tb_lineno)
+                    print(self.downloading,e)
                     pass
                 else:
                     if(self.allDownloaded()):
@@ -398,6 +399,7 @@ class Peer:
                         if msg_id==2:
                             generate_heading(f"Interested {self.ip} | {self.port}")
                             self.peer_interested = 1
+                            self.send_bitfield()
                         if msg_id==3:
                             generate_heading(f"Not Interested {self.ip} | {self.port}")
                             self.peer_interested = 0

@@ -43,9 +43,14 @@ class Tracker:
                 #multifile
                 self.cumulative_len=[]
                 files=self.raw_data[b'info'][b'files']
+                print(files)
                 for f in files:
                     self.file_length+=f[b'length']
-                    self.multi_files.append((f[b'path'][0].decode(),f[b'length']))
+                    directory_name=""
+                    for a in f[b'path']:
+                        directory_name+=a.decode()+"/"
+                    directory_name=directory_name[:len(directory_name)-1]
+                    self.multi_files.append((directory_name,f[b'length']))
                     self.cumulative_len.append(self.file_length)
             else:
                 self.file_length=self.raw_data['info'.encode()]['length'.encode()]
@@ -97,7 +102,11 @@ class Tracker:
             if not os.path.exists(self.fileordir_name):
                 os.mkdir(self.fileordir_name)
             for fn in self.multi_files:
-                # print(fn[0])
+                print(fn[0])
+                direct=self.fileordir_name+"/"+'/'.join(fn[0].split('/')[:-1])+"/"
+                print(direct)
+                if not os.path.exists(direct):
+                    os.mkdir(direct)
                 with open(self.fileordir_name+"/"+fn[0],"w") as f:
                     pass
         else:
@@ -126,7 +135,8 @@ class Tracker:
             heapq.heapify(self.block_heap)
             for p in self.peers:
                 p.downloading=1
-                await p.send_request_message(exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
+                if(p.writer!=None):
+                    await p.send_request_message(exp_blocks[i].piece,exp_blocks[i].offset,exp_blocks[i].size)
         else:
             bo,bl=self.find_next_block(self.piece_queue[0],ip,port)
             # generate_heading(f"Found {bo} {bl}")
@@ -138,7 +148,8 @@ class Tracker:
                 for p in self.peers:
                     # if(p.downloading==0):
                     p.downloading=1
-                    await p.send_request_message(self.piece_queue[0],bo,bl)
+                    if(p.writer!=None):
+                        await p.send_request_message(self.piece_queue[0],bo,bl)
     
     async def send_block(self,piece_index,block_offset,block_length,writer):
         generate_heading(f"Sending {piece_index} {block_offset} {block_length}")
@@ -270,15 +281,19 @@ class Tracker:
             end_pos=(piece_index+1)*self.piece_length
             si=search(start_pos)
             ei=search(end_pos)
-            
+            ei=min(ei,len(self.cumulative_len))
             data_offset = 0
             last_length = start_pos
             generate_heading(f"Piece Index: {piece_index} :-> {(si,ei)}")
+            f1=open("logs.txt","a")
+            if(si!=0):
+                start_pos=start_pos-self.cumulative_len[si-1]
             for i in range(si,ei+1):
                 end=min(self.cumulative_len[i],end_pos)
                 async with aiofiles.open(self.fileordir_name+"/"+self.multi_files[i][0],"rb+") as f:
                     await f.seek(start_pos,0)
                     await f.write(data[data_offset:data_offset+(end-last_length)])
+                    f1.write(f"{i} :- {(piece_index,end-last_length)}\n")
                 data_offset += end-last_length
                 last_length = self.cumulative_len[i]
                 start_pos=0
@@ -290,23 +305,29 @@ class Tracker:
                 await f.write(data)
         # f.close()
     
-    async def broadcast_have(self, piece_index):
+    def broadcast_have(self, piece_index):
         # generate_heading("Broadcasting have...")
         for peer in self.peers:
-            await peer.send_have(piece_index)
+            peer.send_have(piece_index)
     
     async def write_block(self,piece_index,block_offset,block_data,ip,port):
+        print(piece_index,block_offset,ip,port)
         # if(self.pieces[piece_index][math.ceil(block_offset/2**14)].status==2):
         #     return
         # generate_heading(f"{piece_index} | {block_offset} |")
         # self.pieces[piece_index][math.ceil(block_offset/2**14)]=Block(piece_index,math.ceil(block_offset/2**14),len(block_data))
         if (self.piece_status[piece_index]==1):
+            print("308: returned")
             return
         # If all blocks have been received - the piece is yet to be verified
         if(self.pieces[piece_index][math.ceil(block_offset/2**14)].data==b''):
+            print("312")
             self.num_downloaded_blocks+=1
+        else:
+            return
         self.pieces[piece_index][math.ceil(block_offset/2**14)].data=block_data
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
+        print("316")
         
         self.download_progress()
         # try:
@@ -316,20 +337,28 @@ class Tracker:
         if(self.inEndgame):
             for p in self.peers:
                 if(p.ip!=ip or p.port!=port):
-                    p.send_cancel(piece_index,block_offset,len(block_data))   
+                    if(p.writer!=None):
+                        p.send_cancel(piece_index,block_offset,len(block_data))   
                 p.downloading=0
+        print("328")
         if(sum(self.piece_status)==4):
             # generate_heading(f"Entered rarest first")
             self.state=1
+        print("332")
+        flag=False
         if (self.is_piece_complete(piece_index)):
+            print("335")
             is_verified,data = self.verify_piece(piece_index)
+            print("337")
             if (is_verified):
                 # Need to await here
                 # generate_heading(f"Verified piece {piece_index}")
                 self.downloading_piece=None
                 self.piece_status[piece_index]=1
                 # print(f"Before Popping:",self.piece_queue)
+                print("344")
                 self.piece_queue.remove(piece_index)
+                print("346")
                 # print(f"Piece No. Popped {piece_index}",self.piece_queue)
                 # generate_heading(f"Length of t be downloaded: {len(self.to_be_downloaded)}")
                 if(len(self.to_be_downloaded)!=0):
@@ -338,18 +367,25 @@ class Tracker:
                     if (self.state==0):
                         k=np.random.randint(len(self.to_be_downloaded))
                         k=self.to_be_downloaded[k]
+                        print("353")
                     # Rarest first
-                    elif (self.state==1):
+                    else:
+                        
                         k = self.get_rarest_piece()
+                        
+                    print("359")
                     # generate_heading(f"Adding piece {k} to the queue")
                     self.piece_queue.append(k)
+                    print("364")
                     self.to_be_downloaded.remove(k)
+                    print("366")
                 await self.write_piece(piece_index,data)
-                await self.broadcast_have(piece_index)
+                # self.broadcast_have(piece_index)
             else:
-                # generate_heading(f"Corrupted Piece {piece_index}")
+                generate_heading(f"Corrupted Piece {piece_index}")
+                flag=True
+                self.downloading_piece=None
                 self.num_downloaded_blocks-=len(self.pieces[piece_index])
-                self.pieces[piece_index] = {}
                 # if(sum(self.piece_status)<self.no_pieces):
                 #     flag=True
                 #     while flag:
@@ -363,9 +399,13 @@ class Tracker:
                 # generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
         # print("138: meow",len(self.block_heap))
+        print("387")
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
+        print("389")
         # print("139: meow",len(self.block_heap))
         heapq.heapify(self.block_heap)
+        if(flag==True):
+            self.pieces[piece_index] = {}
     
     def download_progress(self):
         percent=(self.num_downloaded_blocks/((self.no_pieces-1)*self.num_blocks+self.num_blocks_last))*100
