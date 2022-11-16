@@ -194,7 +194,9 @@ class Peer:
                     if (self.allDownloaded()):
                         self.downloading = 1
                         self.download_start = time.time()
-                        # pass
+                        self.writer.close()
+                        self.reader=None
+                        self.writer=None
                         return
                     # print(f"176: Here1 {self.ip} | {self.port}")
                     recv_data=await asyncio.wait_for(self.reader.read(65535),5)
@@ -269,7 +271,9 @@ class Peer:
                             piece_no, block_offset, block_size, piece_status=await self.get_piece_block(self.ip,self.port)
                             if(piece_status==True):
                                 # print("240")
-                                # self.writer.close()
+                                self.writer.close()
+                                self.writer=None
+                                self.reader=None
                                 # await self.writer.wait_closed()
                                 return
                             if(piece_no==None):
@@ -303,7 +307,7 @@ class Peer:
                         current = round(time.time())
                         if (current>self.began_at + 120):
                             self.began_at = current
-                            self.send_keep_alive()
+                            await self.send_keep_alive()
                 
                 except ConnectionResetError:
                     print("274: Connection reset error")
@@ -334,12 +338,14 @@ class Peer:
                 else:
                     if(self.allDownloaded()):
                         # print("291")
-                        # self.writer.close()
+                        self.writer.close()
+                        self.reader=None
+                        self.writer=None
                         # await self.writer.wait_closed()
                         # return
-                        self.downloading = 1
-                        self.download_start = time.time()
-                        pass
+                        # self.downloading = 1
+                        # self.download_start = time.time()
+                        return
                     # print(f"292: {self.ip} | {self.port}")
                     if(self.downloading==1 and not self.isEngame):
                         if(self.download_start+10<time.time()):
@@ -353,8 +359,10 @@ class Peer:
                         if(st==True):
                             print("306")
                             self.writer.close()
-                            self.downloading = 1
-                            self.download_start = time.time()
+                            self.reader=None
+                            self.writer=None
+                            # self.downloading = 1
+                            # self.download_start = time.time()
                             return
                         if(pno==None):
                             print("piece no. NONE")
