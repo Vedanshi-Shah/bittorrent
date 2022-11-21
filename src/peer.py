@@ -93,19 +93,21 @@ class Peer:
                     bitfield=bitstring.BitArray(bitfield).bin
                     self.set_bitfield(bitfield)
         except Exception as e:
+            return
+
             # print("Handshake ke baad bitfield nahi aya",e)
-            print("94:",e)
+#            print("94:",e)
 
     async def connect(self):
         try:
             # print(self.ip, self.port)
             self.reader,self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip,self.port),4)
-            
-                
+            with open("connect.txt", 'a') as f:
+                f.write(f"Connected => {self.ip} | {self.port}\n")
         except Exception as e:
             self.reader=None
             self.writer=None
-            print("106:",e)
+#            print("106:",e)
 
     async def send_request_message(self,piece_index,block_offset,block_length):
         # Index, Block Offset, Block length
@@ -158,11 +160,11 @@ class Peer:
         
     
     def send_bitfield(self):
-        generate_heading("Sending bitfield")
+#        generate_heading("Sending bitfield")
         length,bitfield = self.create_message()
         bitfield_message = struct.pack("!IB",length,5)
         length_of_bitfield = f"!{length-1}s"
-        print(length_of_bitfield)
+#        print(length_of_bitfield)
         bitfield_message += struct.pack(length_of_bitfield, bitfield)
         self.writer.write(bitfield_message)
     
@@ -210,18 +212,18 @@ class Peer:
                             # generate_heading(f"Choked by {self.ip} | {self.port}")
                             self.peer_choking=1
                         if msg_id==1:
-                            generate_heading(f"Unchoked by {self.ip} | {self.port}")
+#                            generate_heading(f"Unchoked by {self.ip} | {self.port}")
                             self.peer_choking=0
                         if msg_id==2:
-                            generate_heading(f"Interested {self.ip} | {self.port}")
+#                            generate_heading(f"Interested {self.ip} | {self.port}")
                             self.peer_interested = 1
                             # Send bitfield
                             self.send_bitfield()
                         if msg_id==3:
-                            generate_heading(f"Not Interested {self.ip} | {self.port}")
+#                            generate_heading(f"Not Interested {self.ip} | {self.port}")
                             self.peer_interested = 0
                         if msg_id==4:
-                            generate_heading(f"Have {self.ip} | {self.port}")
+#                            generate_heading(f"Have {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             self.update_bitfield(piece_index)
                         if msg_id==5:
@@ -231,7 +233,7 @@ class Peer:
                             self.set_bitfield(bitfield)
                             # print(self.ip,'---------',self.port,"-------",self.present_bits)
                         if msg_id==6:
-                            generate_heading(f"Request {self.ip} | {self.port}")
+#                            generate_heading(f"Request {self.ip} | {self.port}")
                             if (self.peer_interested and not(self.am_choking)):
                                 # Send piece
                                 # Decode the request message
@@ -310,30 +312,34 @@ class Peer:
                             await self.send_keep_alive()
                 
                 except ConnectionResetError:
-                    print("274: Connection reset error")
+#                    print("274: Connection reset error")
                     self.writer.close()
                     self.writer = None
                     self.reader=None
                     self.downloading = 0
+                    with open("connect.txt", "a") as f:
+                        f.write(f"Disconnected => {self.ip} | {self.port}")
                     # await self.connect()
                     # await self.writer.wait_closed()
                     # break
-                    print(f"{self.ip} {self.port} returned")
+#                    print(f"{self.ip} {self.port} returned")
                     return
                 except BrokenPipeError:
-                    print("Broken Pipe Error")
+#                    print("Broken Pipe Error")
                     # await self.connect()
                     # await self.send_handshake()
                     # await self.send_interested()
                     self.writer.close()
                     self.writer = None
                     self.reader=None
+                    with open("connect.txt", "a") as f:
+                        f.write(f"Disconnected => {self.ip} | {self.port}")
                     return
                 except Exception as e:
                     exc_type, exc_obj, exc_tb = sys.exc_info()
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print(exc_type, fname, exc_tb.tb_lineno)
-                    print(self.downloading,e)
+#                    print(exc_type, fname, exc_tb.tb_lineno)
+#                    print(self.downloading,e)
                     pass
                 else:
                     if(self.allDownloaded()):
@@ -341,6 +347,8 @@ class Peer:
                         self.writer.close()
                         self.reader=None
                         self.writer=None
+                        with open("connect.txt", "a") as f:
+                            f.write(f"Disconnected => {self.ip} | {self.port}")
                         # await self.writer.wait_closed()
                         # return
                         # self.downloading = 1
@@ -357,15 +365,17 @@ class Peer:
                         # print(f"301: hey im here {self.ip} {self.port}")
                         pno,blo,bls,st=await self.get_piece_block(self.ip,self.port)
                         if(st==True):
-                            print("306")
+#                            print("306")
                             self.writer.close()
                             self.reader=None
                             self.writer=None
                             # self.downloading = 1
                             # self.download_start = time.time()
+                            with open("connect.txt", "a") as f:
+                                f.write(f"Disconnected => {self.ip} | {self.port}")
                             return
                         if(pno==None):
-                            print("piece no. NONE")
+#                            print("piece no. NONE")
                             pass
                         else:
                             if(self.present_bits[pno]==1 and not self.isEngame()):
@@ -377,17 +387,19 @@ class Peer:
             # await self.pure_seeding()
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
-            print(exc_obj)
+#            print(exc_obj)
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print("331",exc_type, fname, exc_tb.tb_lineno)
+#            print("331",exc_type, fname, exc_tb.tb_lineno)
             self.writer.close()
             self.reader=None
             self.writer=None
+            with open("connect.txt", "a") as f:
+                f.write(f"Disconnected => {self.ip} | {self.port}")
             return
 
     async def pure_seeding(self):
         try:
-            generate_heading(f"Entered pure seeding {self.ip} {self.port}")
+#            generate_heading(f"Entered pure seeding {self.ip} {self.port}")
             while True:
                 try:
                     # self.send_bitfield()
@@ -399,30 +411,30 @@ class Peer:
                         msg_id=struct.unpack_from("!B",recv_data,offset)[0]
                         offset+=1
                         if msg_id==0:
-                            generate_heading(f"Choked by {self.ip} | {self.port}")
+#                            generate_heading(f"Choked by {self.ip} | {self.port}")
                             self.peer_choking=1
                         if msg_id==1:
-                            generate_heading(f"Unchoked by {self.ip} | {self.port}")
+#                            generate_heading(f"Unchoked by {self.ip} | {self.port}")
                             self.peer_choking=0
                         if msg_id==2:
-                            generate_heading(f"Interested {self.ip} | {self.port}")
+#                            generate_heading(f"Interested {self.ip} | {self.port}")
                             self.peer_interested = 1
                             self.send_bitfield()
                         if msg_id==3:
-                            generate_heading(f"Not Interested {self.ip} | {self.port}")
+#                            generate_heading(f"Not Interested {self.ip} | {self.port}")
                             self.peer_interested = 0
                         if msg_id==4:
-                            generate_heading(f"Have {self.ip} | {self.port}")
+#                            generate_heading(f"Have {self.ip} | {self.port}")
                             piece_index=struct.unpack_from("!i",recv_data,offset)[0]
                             self.update_bitfield(piece_index)
                         if msg_id==5:
-                            generate_heading(f"BitField {self.ip} | {self.port}")
+#                            generate_heading(f"BitField {self.ip} | {self.port}")
                             bitfield=recv_data[offset:]
                             bitfield=bitstring.BitArray(bitfield).bin
                             self.set_bitfield(bitfield)
                             # print(self.ip,'---------',self.port,"-------",self.present_bits)
                         if msg_id==6:
-                            generate_heading(f"Request {self.ip} | {self.port}")
+#                            generate_heading(f"Request {self.ip} | {self.port}")
                             if (self.peer_interested and not(self.am_choking)):
                                 piece_index = struct.unpack_from("!i",recv_data,offset)
                                 offset += 4
@@ -433,27 +445,27 @@ class Peer:
                 except BrokenPipeError:
                     await self.connect()
                     await self.send_handshake()
-                    print("Hello")
+#                    print("Hello")
                 except ConnectionResetError as e:
                     exc_type, exc_obj, exc_tb = sys.exc_info()
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print("391",exc_type, fname, exc_tb.tb_lineno)
-                    print(exc_obj)
+#                    print("391",exc_type, fname, exc_tb.tb_lineno)
+#                    print(exc_obj)
                 except Exception as e:
                     exc_type, exc_obj, exc_tb = sys.exc_info()
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print("396",exc_type, fname, exc_tb.tb_lineno)
-                    print(exc_obj)
+#                    print("396",exc_type, fname, exc_tb.tb_lineno)
+#                    print(exc_obj)
         except BrokenPipeError:
             self.writer.close()
             self.writer = None
         except ConnectionResetError as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print("401",exc_type, fname, exc_tb.tb_lineno)
-            print(exc_obj)
+#            print("401",exc_type, fname, exc_tb.tb_lineno)
+#            print(exc_obj)
         except Exception as e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print("406",exc_type, fname, exc_tb.tb_lineno)
-            print(exc_obj)
+#            print("406",exc_type, fname, exc_tb.tb_lineno)
+#            print(exc_obj)

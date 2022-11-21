@@ -151,6 +151,8 @@ class Tracker:
                 pass
         with open("logs.txt", "w") as f:
             pass
+        with open("connect.txt", "w") as f:
+            pass
     
     def sayEndgame(self):
         if(self.inEndgame):
@@ -377,7 +379,7 @@ class Tracker:
         self.pieces[piece_index][math.ceil(block_offset/2**14)].status=2
         # print("316")
         
-        self.download_progress()
+        # self.download_progress()
         # try:
         #     await self.download_progress()
         # except Exception as e:
@@ -393,6 +395,7 @@ class Tracker:
             self.state=1
         # print("332")
         flag=False
+        self.downloaded += len(block_data)
         if (self.is_piece_complete(piece_index)):
             # print("335")
             is_verified,data = self.verify_piece(piece_index)
@@ -433,6 +436,8 @@ class Tracker:
                 generate_heading(f"Corrupted Piece {piece_index}")
                 flag=True
                 self.downloading_piece=None
+                for block in self.pieces[piece_index].values():
+                    self.downloading-=block.size
                 self.num_downloaded_blocks-=len(self.pieces[piece_index])
                 print("389:",math.ceil(block_offset/2**14))
                 print("390:",self.pieces[piece_index])
@@ -451,7 +456,6 @@ class Tracker:
                 # generate_heading(f"Number of pieces downloaded: {sum(self.piece_status)}")
 
         # print("138: meow",len(self.block_heap))
-        self.downloaded += len(block_data)
         # print("404")
         self.block_heap.remove(self.pieces[piece_index][math.ceil(block_offset/2**14)])
         # print("406")
